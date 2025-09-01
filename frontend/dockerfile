@@ -1,0 +1,27 @@
+# --- ステージ1: 依存関係のインストール ---
+# 依存関係のインストールのみを行うステージ
+FROM node:22.17.0-alpine AS deps
+WORKDIR /app
+
+# package.json とロックファイルを先にコピーすることで、
+# ソースコードの変更時に不要な `npm install` が走るのを防ぐ
+COPY package.json package-lock.json* ./
+RUN npm install
+
+# --- ステージ2: 開発サーバーの実行 ---
+# 実際に開発サーバーを動かすステージ
+FROM node:22.17.0-alpine
+WORKDIR /app
+
+# ステージ1でインストールした依存関係をコピー
+COPY --from=deps /app/node_modules ./node_modules
+# ソースコード全体をコピー
+COPY . .
+
+# Viteが使用するポート番号をコンテナの外部に公開
+EXPOSE 5173
+
+# 開発サーバーを起動
+# "npm run dev" の中身が "vite" の場合、コンテナ外からアクセスできないため、
+# package.jsonのscriptsを "vite --host 0.0.0.0" に変更することを強く推奨します。
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

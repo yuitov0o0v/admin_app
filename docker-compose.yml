@@ -1,0 +1,34 @@
+services:
+  # フロントエンドサービス (Node.js / Vite)
+  frontend:
+    # Dockerfileがあるディレクトリを指定
+    # 例: frontend/Dockerfile
+    build:
+      context: ./frontend # Node.jsプロジェクトのルートディレクトリ
+      dockerfile: Dockerfile # Dockerfileのファイル名
+    ports:
+      - "5173:5173" # ホストの5173ポートをコンテナの5173ポートにマッピング
+    volumes:
+      - ./frontend:/app # ホストのfrontendディレクトリをコンテナの/appにマウント (開発用)
+      - /app/node_modules # node_modulesはホストからマウントしない (コンテナ内で生成されるため)
+    # Node.js DockerfileのCMDをオーバーライドして、開発サーバーを起動
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    # バックエンドサービスが先に起動するのを待つ場合 (オプション)
+    # depends_on:
+    #   - backend
+
+  # バックエンドサービス (Python / FastAPI)
+  backend:
+    # Dockerfileがあるディレクトリを指定
+    # 例: backend/Dockerfile
+    build:
+      context: ./backend # Pythonプロジェクトのルートディレクトリ
+      dockerfile: Dockerfile # Dockerfileのファイル名
+    ports:
+      - "8000:8000" # ホストの8000ポートをコンテナの8000ポートにマッピング
+    volumes:
+      - ./backend:/app # ホストのbackendディレクトリをコンテナの/appにマウント (開発用)
+    # Python DockerfileのCMDをオーバーライドして、開発サーバーを起動
+    # main:app の部分は、FastAPIアプリケーションのエントリポイントに合わせて変更してください
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+

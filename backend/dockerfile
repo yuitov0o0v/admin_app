@@ -1,0 +1,42 @@
+# --- ステージ1: 依存関係のビルド ---
+# 依存関係をwheel形式でビルドするステージ
+FROM python:3.11-slim AS builder
+WORKDIR /wheels
+
+# pip自体のアップグレード
+RUN pip install --upgrade pip
+
+# requirements.txt をコピーして、依存関係をwheel形式でビルド
+# これにより、最終的なイメージにビルドツールを含める必要がなくなる
+COPY ./requirements.txt .
+RUN pip wheel --no-cache-dir -r requirements.txt
+
+# --- ステージ2: アプリケーションの実行 ---
+# 実際にアプリケーションを動かすステージ
+FROM python:3.11-slim
+WORKDIR /app
+
+# ステージ1でビルドしたwheelファイルをコピー
+COPY --from=builder /wheels /wheels
+# requirements.txtからwheelを使ってインストール
+COPY ./requirements.txt .
+
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt
+
+# セキュリティ向上のため、専用の非rootユーザーを作成して利用する
+RUN adduser --system --group --no-create-home appuser
+USER appuser
+
+# FastAPIのアプリケーションコードをコピー
+# プロジェクト構造に合わせて `COPY ./app /app/app` などに変更してください
+COPY . .
+
+# FastAPI(Uvicorn)が使用するポート8000を外部に公開
+EXPOSE 8000
+
+# 開発用サーバーを起動
+# --host 0.0.0.0: コンテナ外部からのアクセスを許可
+# --port 8000: 8000番ポートで待機
+# --reload: ソースコードの変更を検知して自動でリロード
+# app.main:app の部分は、FastAPIのインスタンスがある場所に合わせて変更 (例: main.py内のappインスタンス)
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

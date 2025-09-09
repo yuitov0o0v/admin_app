@@ -1,30 +1,26 @@
-import { useState, useEffect } from 'react';
+import React from 'react';
+import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // 追加: Router
+import Login from './pages/Login'; // pages/からインポート
+import Home from './pages/Home'; // pages/からインポート
 
-function App() {
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState(null);
+const theme = createTheme();
 
-  useEffect(() => {
-    fetch('http://localhost:8000/api/test')
-      .then(response => response.json())
-      .then(data => setMessage(data.message))
-      .catch(err => setError(err.message));
-  }, []);
-
+const App: React.FC = () => {
   return (
-    <div>
-      <h1>こんにちは、React + FastAPI アプリケーション！
-      </h1>
-      {error ? (
-        <p>エラー: {error}</p>
-      ) : message ? (
-        <p>バックエンドからのメッセージ: {message}</p>
-      ) : (
-        <p>読み込み中...</p>
-      )}
-    </div>
+    <ThemeProvider theme={theme}>
+      <AuthProvider>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/home" element={<Home />} />
+            <Route path="/" element={<Login />} /> {/* デフォルトでログイン表示 */}
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
   );
-}
-
+};
 
 export default App;

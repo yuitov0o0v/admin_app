@@ -39,7 +39,7 @@ const Login: React.FC = () => {
     setLoading(true);
     try {
       await signIn(email, password);
-      navigate('/home');
+      navigate('/');
     } catch (err: any) {
       // Firebaseのエラーコードに応じてメッセージをカスタマイズするとより親切
       const errorMessage = err.code === 'auth/invalid-credential'

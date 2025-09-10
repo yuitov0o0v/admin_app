@@ -1,10 +1,12 @@
 import React from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // 追加: Router
-import Login from './pages/Login'; // pages/からインポート
-import Home from './pages/Home'; // pages/からインポート
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import Login from './pages/Login';
+import Home from './pages/Home';
 
+// MUIのテーマを作成
 const theme = createTheme();
 
 const App: React.FC = () => {
@@ -13,9 +15,21 @@ const App: React.FC = () => {
       <AuthProvider>
         <Router>
           <Routes>
+            {/* --- 公開ルート --- */}
+            {/* ログインページへのパスを定義します */}
             <Route path="/login" element={<Login />} />
-            <Route path="/home" element={<Home />} />
-            <Route path="/" element={<Login />} /> {/* デフォルトでログイン表示 */}
+
+            {/* --- 保護されたルート --- */}
+            {/* アプリケーションのホームページ（ルートパス "/"）を定義します。 */}
+            {/* ProtectedRouteが未ログインのユーザーを自動で "/login" にリダイレクトします。 */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Home />
+                </ProtectedRoute>
+              }
+            />
           </Routes>
         </Router>
       </AuthProvider>

@@ -42,7 +42,7 @@ const Sidebar: React.FC = () => {
 
   // メニューデータを定義
   const menuItems: MenuItemData[] = [
-    { text: 'ホーム', icon: <HomeIcon />, path: '/home' },
+    { text: 'ホーム', icon: <HomeIcon />, path: '/' },
     { text: 'お知らせ', icon: <InfoIcon />, path: '/info' },
   ];
 

@@ -28,7 +28,7 @@ const Home: React.FC = () => {
       >
         <Typography variant="h4" component="h1" gutterBottom>
         ホーム
-      </Typography>
+       </Typography>
       {user ? (
         <>
           <Typography>ようこそ、{user.email}さん！</Typography>

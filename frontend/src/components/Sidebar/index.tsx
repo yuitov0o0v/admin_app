@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
 import SettingsIcon from '@mui/icons-material/Settings';
+import MapIcon from '@mui/icons-material/Map';
 import InfoIcon from '@mui/icons-material/Info';
 import LogoutIcon from '@mui/icons-material/Logout';
 
@@ -43,11 +44,12 @@ const Sidebar: React.FC = () => {
   // メニューデータを定義
   const menuItems: MenuItemData[] = [
     { text: 'ホーム', icon: <HomeIcon />, path: '/' },
+    { text: 'スポット登録', icon: <MapIcon />, path: '/spotmap' },
     { text: 'お知らせ', icon: <InfoIcon />, path: '/info' },
   ];
 
   const secondaryMenuItems: MenuItemData[] = [
-    { text: '設定', icon: <SettingsIcon />, path: '/settings' },
+    { text: '設定', icon: <SettingsIcon />, path: '/setting' },
     // ログアウト項目には `path` の代わりに `action` を指定
     { text: 'ログアウト', icon: <LogoutIcon />, action: handleSignOut },
   ];

@@ -4,7 +4,6 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CustomButton from '../../components/Button';
 import { useNavigate } from 'react-router-dom'; // ログアウト用リダイレクト
-import Sidebar from '../../components/Sidebar';
 
 const Home: React.FC = () => {
   const { user, signOut } = useContext(AuthContext)!;
@@ -21,7 +20,6 @@ const Home: React.FC = () => {
 
   return (
     <Box sx={{ maxWidth: 600, mx: 'auto', mt: 8 }}>
-      <Sidebar />
       <Box
         component="main" // メインコンテンツであることを示すためにmain要素としてレンダリング
         sx={{ flexGrow: 1, p: 3, mt: 8 }} // flexGrow: 1で残りのスペースを全て使い、paddingで見やすくする

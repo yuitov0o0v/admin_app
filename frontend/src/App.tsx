@@ -3,8 +3,14 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import Layout from './components/Layout'; // 👈 レイアウトコンポーネント
 import Login from './pages/Login';
+import Info from './pages/Info';
+import Setting from './pages/Setting';
+import SpotMap from './pages/SpotMap';
 import Home from './pages/Home';
+
+// import Profile from './pages/Profile'; // 例：他の保護されたページ
 
 // MUIのテーマを作成
 const theme = createTheme();
@@ -16,20 +22,24 @@ const App: React.FC = () => {
         <Router>
           <Routes>
             {/* --- 公開ルート --- */}
-            {/* ログインページへのパスを定義します */}
+            {/* このルートにはサイドバーのレイアウトは適用されません */}
             <Route path="/login" element={<Login />} />
 
             {/* --- 保護されたルート --- */}
-            {/* アプリケーションのホームページ（ルートパス "/"）を定義します。 */}
-            {/* ProtectedRouteが未ログインのユーザーを自動で "/login" にリダイレクトします。 */}
+            {/* この親ルートが、配下の子ルートをすべて保護し、レイアウトを適用します */}
             <Route
-              path="/"
               element={
                 <ProtectedRoute>
-                  <Home />
+                  <Layout />
                 </ProtectedRoute>
               }
-            />
+            >
+              {/* ここにネストされたルートはすべてログインが必要になり、サイドバーが表示されます */}
+              <Route path="/" element={<Home />} />
+              <Route path="/SpotMap" element={<SpotMap />} />
+              <Route path="/info" element={<Info />} />
+              <Route path="/setting" element={<Setting />} />
+            </Route>
           </Routes>
         </Router>
       </AuthProvider>

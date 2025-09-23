@@ -1,18 +1,28 @@
 import React from 'react';
-import { Outlet } from 'react-router-dom'; // 👈 Outletをインポート
-import Sidebar from './Sidebar'; // サイドバーコンポーネント
+import { Outlet, useLocation } from 'react-router-dom'; // 👈 useLocation をインポート
+import Sidebar from './Sidebar';
 import Box from '@mui/material/Box';
 
 const Layout: React.FC = () => {
+  const location = useLocation();
+  // 👇 地図ページのパスかどうかを判定
+  const isMapPage = location.pathname === '/SpotMap';
+
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', height: '100vh' }}> {/* 👈 高さを画面全体に */}
       <Sidebar />
       {/* メインコンテンツエリア */}
       <Box
         component="main"
-        sx={{ flexGrow: 1, p: 3, mt: { xs: 7, sm: 8 } }} // ヘッダーがある場合などを考慮したマージン
+        sx={{
+          flexGrow: 1,
+          // 👇 isMapPage に応じてスタイルを切り替え
+          p: isMapPage ? 0 : 3,
+          mt: isMapPage ? 0 : { xs: 7, sm: 8 },
+          position: 'relative', // 👈 子要素を絶対配置する基準にする
+          overflow: 'hidden', // 👈 地図がはみ出ないように
+        }}
       >
-        {/* 👇 ここにURLに応じたページコンポーネントが表示される */}
         <Outlet />
       </Box>
     </Box>

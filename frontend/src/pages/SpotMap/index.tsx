@@ -105,7 +105,7 @@ const SpotRegistrationMap: React.FC = () => {
     try {
       const { error } = await supabase.from('spots').insert([
         {
-          name: spotName,
+          title: spotName,
           description: spotDescription,
           latitude: newSpotPosition.lat,
           longitude: newSpotPosition.lng,

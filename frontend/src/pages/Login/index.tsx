@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import type { FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 
 // Material-UI Components
@@ -12,8 +12,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-// import Link from '@mui/material/Link'; # パスワードリセット用に後で使うかも
-// import Grid from '@mui/material/Grid';
+import Link from '@mui/material/Link';
 import Avatar from '@mui/material/Avatar';
 
 // Material-UI Icons
@@ -22,7 +21,6 @@ import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import InputAdornment from '@mui/material/InputAdornment';
 import IconButton from '@mui/material/IconButton';
-
 
 const Login: React.FC = () => {
   const { signIn } = useContext(AuthContext)!;
@@ -41,7 +39,6 @@ const Login: React.FC = () => {
       await signIn(email, password);
       navigate('/');
     } catch (err: any) {
-      // Firebaseのエラーコードに応じてメッセージをカスタマイズするとより親切
       const errorMessage = err.code === 'auth/invalid-credential'
         ? 'メールアドレスまたはパスワードが間違っています。'
         : 'ログイン中にエラーが発生しました。';
@@ -58,12 +55,12 @@ const Login: React.FC = () => {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: '100vh', // 画面全体の高さを使う
-        backgroundColor: '#FFFFF', // 背景に薄い色を付ける
+        minHeight: '100vh',
+        backgroundColor: '#f5f5f5',
       }}
     >
       <Paper
-        elevation={9} // 影を少し濃くする
+        elevation={6}
         sx={{
           padding: 4,
           display: 'flex',
@@ -73,14 +70,13 @@ const Login: React.FC = () => {
           width: '100%',
         }}
       >
-        <Avatar sx={{ m: 1, bgcolor: '#000000' }}>
+        <Avatar sx={{ m: 1, bgcolor: '#1976d2' }}>
           <LockOutlinedIcon />
         </Avatar>
         <Typography component="h1" variant="h5">
           ログイン
         </Typography>
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
-          {/* Stackで要素間のスペースを均等に管理 */}
           <Stack spacing={2}>
             <TextField
               label="メールアドレス"
@@ -89,7 +85,7 @@ const Login: React.FC = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               fullWidth
-              autoFocus // ページ読み込み時に自動でフォーカス
+              autoFocus
             />
             <TextField
               label="パスワード"
@@ -98,7 +94,7 @@ const Login: React.FC = () => {
               onChange={(e) => setPassword(e.target.value)}
               required
               fullWidth
-              InputProps={{ // パスワード表示切り替え機能
+              InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton
@@ -113,7 +109,6 @@ const Login: React.FC = () => {
                 ),
               }}
             />
-            {/* エラーメッセージがある場合のみAlertを表示 */}
             {error && <Alert severity="error">{error}</Alert>}
             <Button
               type="submit"
@@ -136,6 +131,14 @@ const Login: React.FC = () => {
               )}
               ログイン
             </Button>
+            <Box sx={{ textAlign: 'center', mt: 2 }}>
+              <Typography variant="body2">
+                アカウントをお持ちでない方は{' '}
+                <Link component={RouterLink} to="/signup" variant="body2">
+                  こちら
+                </Link>
+              </Typography>
+            </Box>
           </Stack>
         </Box>
       </Paper>

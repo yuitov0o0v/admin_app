@@ -1,30 +1,54 @@
-import { useState, useEffect } from 'react';
+import React from 'react';
+import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import Layout from './components/Layout'; // 👈 レイアウトコンポーネント
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import Info from './pages/Info';
+import Setting from './pages/Setting';
+import SpotMap from './pages/SpotMap';
+import Home from './pages/Home';
+import TestComponent from './tests/AuthSignUp';
+// import Profile from './pages/Profile'; // 例：他の保護されたページ
 
-function App() {
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState(null);
+// MUIのテーマを作成
+const theme = createTheme();
 
-  useEffect(() => {
-    fetch('http://localhost:8000/api/test')
-      .then(response => response.json())
-      .then(data => setMessage(data.message))
-      .catch(err => setError(err.message));
-  }, []);
 
+const App: React.FC = () => {
   return (
-    <div>
-      <h1>こんにちは、React + FastAPI アプリケーション！
-      </h1>
-      {error ? (
-        <p>エラー: {error}</p>
-      ) : message ? (
-        <p>バックエンドからのメッセージ: {message}</p>
-      ) : (
-        <p>読み込み中...</p>
-      )}
-    </div>
-  );
-}
+    <ThemeProvider theme={theme}>
+      <AuthProvider>
+        <Router>
+          <Routes>
+            {/* --- 公開ルート --- */}
+            {/* このルートにはサイドバーのレイアウトは適用されません */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/test" element={<TestComponent />} />
 
+            {/* --- 保護されたルート --- */}
+            {/* この親ルートが、配下の子ルートをすべて保護し、レイアウトを適用します */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <Layout />
+                </ProtectedRoute>
+              }
+            >
+              {/* ここにネストされたルートはすべてログインが必要になり、サイドバーが表示されます */}
+              <Route path="/" element={<Home />} />
+              <Route path="/SpotMap" element={<SpotMap />} />
+              <Route path="/info" element={<Info />} />
+              <Route path="/setting" element={<Setting />} />
+            </Route>
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
+  );
+};
 
 export default App;

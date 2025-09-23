@@ -6,7 +6,7 @@ import Box from '@mui/material/Box';
 const Layout: React.FC = () => {
   const location = useLocation();
   // 👇 地図ページのパスかどうかを判定
-  const isMapPage = location.pathname === '/SpotMap';
+  const isMapPage = location.pathname === '/spotmap';
 
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}> {/* 👈 高さを画面全体に */}

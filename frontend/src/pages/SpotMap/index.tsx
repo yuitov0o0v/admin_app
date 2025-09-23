@@ -1,216 +1,392 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  useMapEvents,
-} from 'react-leaflet';
-import { LatLng } from 'leaflet';
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  TextField,
-  CircularProgress,
-  Typography,
-  Paper,
-  Alert
-} from '@mui/material';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import ReactDOMServer from 'react-dom/server'; // React要素を文字列に変換するために必要
+import L from 'leaflet';
 import { supabase } from '../../supabaseClient';
+import { Box, CircularProgress,  } from '@mui/material';
+import { LocationOn } from '@mui/icons-material';
+import { Snackbar, Alert } from '@mui/material';
+import SpotRegistrationForm from '../../components/SpotRegistrationForm';
 
-// スポットデータの型定義
+// LeafletのCSSをインポート
+import 'leaflet/dist/leaflet.css';
+
+// --- Leafletのデフォルトアイコン設定 ---
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+// Material-UIのLocationOnアイコンを使ってカスタムアイコンを作成する関数
+const createColorIcon = (color: string) => {
+  // Material-UIのアイコンをSVG文字列としてレンダリング
+  const iconSvgString = ReactDOMServer.renderToString(
+    <LocationOn style={{ color: color, fontSize: '40px' }} />
+  );
+
+  return L.divIcon({
+    html: iconSvgString,
+    // アイコンのサイズとアンカー（先端）の位置を調整
+    iconSize: [40, 40],
+    iconAnchor: [20, 40], // アイコンの先端が座標に合うように調整
+    popupAnchor: [0, -40],
+    // divIconのデフォルトスタイルを無効化するためのクラス名
+    className: 'custom-div-icon'
+  });
+};
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+// --- ここまで ---
+
+// --- 型定義 ---
+// DBのspotsテーブルの型定義
 interface Spot {
   id: number;
   name: string;
   description: string;
   latitude: number;
   longitude: number;
+  subtitle?: string;
+  address?: string;
+  image_url?: string;
+  ar_model_id?: number;
+  category?: string;
+  pin_color?: string;
+  radius?: number;
 }
 
-// 新しいスポットを追加するためのコンポーネント
-const AddSpotMarker: React.FC<{ onMapClick: (latlng: LatLng) => void }> = ({ onMapClick }) => {
+// ARモデルの型定義
+interface ARModel {
+  id: number;
+  name: string;
+  image_url: string;
+}
+
+// 新規ピンの型定義
+interface NewPin {
+  lat: number;
+  lng: number;
+}
+
+// MapClickHandlerコンポーネントのpropsの型を定義
+interface MapClickHandlerProps {
+  onMapClick: (latlng: L.LatLng) => void;
+}
+
+// 地図クリックイベントをハンドリングするためのコンポーネント
+function MapClickHandler({ onMapClick }: MapClickHandlerProps) {
   useMapEvents({
     click(e) {
       onMapClick(e.latlng);
     },
   });
   return null;
-};
+}
 
-const SpotRegistrationMap: React.FC = () => {
-  // 登録済みのスポット
+const PIN_COLORS = [
+  { name: '赤', value: '#FF0000' },
+  { name: '青', value: '#0000FF' },
+  { name: '緑', value: '#008000' },
+  { name: '黄', value: '#FFFF00' },
+  { name: '紫', value: '#800080' },
+  { name: 'コーラルピンク', value: '#F8AFA6' },
+  { name: 'マスタードイエロー', value: '#DDA448' },
+  { name: 'セージグリーン', value: '#9DC183' },
+  { name: 'ダスティブルー', value: '#6A89A4' },
+  { name: 'トープ', value: '' },
+];
+
+
+const MapRegisterPageLeaflet: React.FC = () => {
   const [spots, setSpots] = useState<Spot[]>([]);
-  // 新規追加するスポットの座標
-  const [newSpotPosition, setNewSpotPosition] = useState<LatLng | null>(null);
-  // 入力モーダルの開閉状態
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  // フォームの入力値
+  const [newPin, setNewPin] = useState<NewPin | null>(null);
+  const newPinMarkerRef = useRef<L.Marker>(null);
+
+  // --- フォーム用のState (全てこのコンポーネントで管理) ---
   const [spotName, setSpotName] = useState('');
   const [spotDescription, setSpotDescription] = useState('');
-  // 処理中の状態
-  const [isLoading, setIsLoading] = useState(false);
-  // エラーメッセージ
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [subtitle, setSubtitle] = useState('');
+  const [address, setAddress] = useState('');
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [arModels, setArModels] = useState<ARModel[]>([]);
+  const [selectedArModelId, setSelectedArModelId] = useState<number | ''>('');
+  const [category, setCategory] = useState<string>('');
+  const [pinColor, setPinColor] = useState<string>(PIN_COLORS[0].value);
+  const [radius, setRadius] = useState<number>(50);
 
-  // Supabaseからスポットデータを取得する関数
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+
+  // 新しいピンのアイコンをピンカラーに応じて動的に生成
+  const newPinIcon = useMemo(() => {
+    return createColorIcon(pinColor);
+  }, [pinColor]);
+  // --- データ取得関連 ---
+  // 既存のスポットをSupabaseから取得
   const fetchSpots = useCallback(async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const { data, error } = await supabase.from('spots').select('*');
-      if (error) throw error;
-      setSpots(data || []);
-    } catch (error: any) {
-      setErrorMessage(`データの取得に失敗しました: ${error.message}`);
+    setLoading(true);
+    const { data, error } = await supabase.from('spots').select('*');
+    if (error) {
       console.error('Error fetching spots:', error);
-    } finally {
-      setIsLoading(false);
+    } else {
+      setSpots(data || []);
+    }
+    setLoading(false);
+  }, []);
+
+  // ARモデルをSupabaseから取得
+  const fetchArModels = useCallback(async () => {
+    const { data, error } = await supabase.from('ar_models').select('id, name, image_url');
+    if (error) {
+      console.error('Error fetching AR models:', error);
+    } else {
+      setArModels(data || []);
     }
   }, []);
 
-  // 初期表示時にスポットデータを取得
+  // 初期表示時にスポットとARモデルを取得
   useEffect(() => {
     fetchSpots();
-  }, [fetchSpots]);
+    fetchArModels();
+  }, [fetchSpots, fetchArModels]);
+  
+  // --- フォームのリセット ---
+  const resetForm = () => {
+      setNewPin(null);
+      setSpotName('');
+      setSpotDescription('');
+      setSubtitle('');
+      setAddress('');
+      setImageFile(null);
+      setImagePreview(null);
+      setSelectedArModelId('');
+      setCategory('');
+      setPinColor(PIN_COLORS[0].value);
+      setRadius(50);
+  }
 
-  // 地図クリック時の処理
-  const handleMapClick = (latlng: LatLng) => {
-    setNewSpotPosition(latlng);
-    setIsModalOpen(true);
+  // --- イベントハンドラ ---
+  // 1. 地図をクリックしたときの処理
+  const handleMapClick = (latlng: L.LatLng) => {
+    setNewPin({ lat: latlng.lat, lng: latlng.lng });
   };
 
-  // モーダルを閉じる処理
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setNewSpotPosition(null);
-    // フォームをリセット
-    setSpotName('');
-    setSpotDescription('');
+  // 2. 新規ピンをドラッグで微調整したときの処理
+  const eventHandlers = useMemo(
+    () => ({
+      dragend() {
+        const marker = newPinMarkerRef.current;
+        if (marker != null) {
+          const { lat, lng } = marker.getLatLng();
+          setNewPin({ lat, lng });
+        }
+      },
+    }),
+    [],
+  );
+
+  // 3. 画像ファイルが選択された時の処理
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      // プレビュー用のURLを生成
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  // スポットを保存する処理
-  const handleSaveSpot = async () => {
-    if (!spotName.trim() || !newSpotPosition) {
-      alert('スポット名を入力してください。');
+  // 4. 登録ボタンを押したときの処理
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newPin || !spotName) {
+      alert('ピンを配置し、スポット名を入力してください。');
       return;
     }
+    setSubmitting(true);
 
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const { error } = await supabase.from('spots').insert([
-        {
-          title: spotName,
-          description: spotDescription,
-          latitude: newSpotPosition.lat,
-          longitude: newSpotPosition.lng,
-        },
-      ]);
-      if (error) throw error;
+    let imageUrl = '';
+    // 画像が選択されていればStorageにアップロード
+    if (imageFile) {
+        const fileName = `${Date.now()}_${imageFile.name}`;
+        // 【重要】'spot-images' はご自身のSupabase Storageのバケット名に置き換えてください
+        const { data, error } = await supabase.storage
+            .from('spot-images')
+            .upload(fileName, imageFile);
 
-      // 保存成功後、最新のデータを再取得してモーダルを閉じる
-      await fetchSpots();
-      handleCloseModal();
+        if (error) {
+            alert('画像のアップロードに失敗しました: ' + error.message);
+            setSubmitting(false);
+            return;
+        }
 
-    } catch (error: any) {
-      setErrorMessage(`保存に失敗しました: ${error.message}`);
-      console.error('Error saving spot:', error);
-    } finally {
-      setIsLoading(false);
+        // アップロードした画像の公開URLを取得
+        const { data: publicUrlData } = supabase.storage
+            .from('spot-images')
+            .getPublicUrl(data.path);
+        
+        imageUrl = publicUrlData.publicUrl;
     }
+    
+    // DBに登録するデータ
+    const spotData = {
+      name: spotName,
+      description: spotDescription,
+      latitude: newPin.lat,
+      longitude: newPin.lng,
+      subtitle: subtitle || null,
+      address: address || null,
+      image_url: imageUrl || null,
+      ar_model_id: selectedArModelId || null,
+      category: category || null,
+      pin_color: pinColor,
+      radius: radius,
+    };
+
+    const { error } = await supabase.from('spots').insert(spotData);
+
+    if (error) {
+      alert('登録に失敗しました: ' + error.message);
+    } else {
+      // alert('登録が完了しました！');
+      setSnackbarOpen(true); // スナックバーを表示
+      resetForm(); // フォームをリセット
+      await fetchSpots();
+    }
+    setSubmitting(false);
   };
+
+  // 緯度経度から住所を自動取得する
+  useEffect(() => {
+    if (!newPin) {
+      setAddress('');
+      return;
+    };
+
+    const fetchAddress = async () => {
+      setAddressLoading(true);
+      try {
+        const res = await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${newPin.lat}&lon=${newPin.lng}`);
+        const data = await res.json();
+        if (data && data.results) {
+            setAddress(data.results.muniCd + data.results.lv01Nm);
+        } else {
+            setAddress('住所が見つかりませんでした。');
+        }
+      } catch (error) {
+        console.error("Error fetching address:", error);
+        setAddress('住所の取得に失敗しました。');
+      } finally {
+        setAddressLoading(false);
+      }
+    };
+
+    fetchAddress();
+  }, [newPin]);
 
 
   return (
-    <Box sx={{ position: 'relative', height: 'calc(100vh - 64px)', width: '100%' }}>
-       <Paper elevation={3} sx={{ p: 2, mb: 2, backgroundColor: 'rgba(255, 255, 255, 0.9)' }}>
-        <Typography variant="h6" gutterBottom>
-          スポット登録マップ
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          地図上をクリックして新しいスポットを追加してください。
-        </Typography>
-         {errorMessage && <Alert severity="error" sx={{ mt: 2 }}>{errorMessage}</Alert>}
-      </Paper>
+    <Box sx={{ display: 'flex', width: '100%', height: '100vh' }}>
+      {/* --- 左側: マップ表示エリア --- */}
+      <Box sx={{ flex: 1, position: 'relative' }}>
+        <MapContainer
+          center={[34.69944, 135.21833]} // 兵庫県立美術館
+          zoom={17}
+          style={{ height: '100%', width: '100%' }}
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
+          <MapClickHandler onMapClick={handleMapClick} />
+          {spots.map((spot) => {
+            const color = spot.pin_color || '#2A81CB'; // デフォルトはLeaflet標準のような青色
+            const spotIcon = createColorIcon(color);
+            return(
+              <Marker
+                key={spot.id}
+                position={[spot.latitude, spot.longitude]}
+                icon={spotIcon}
+              >
+                <Popup>
+                  <b>{spot.name}</b><br />
+                  {spot.description}
+                </Popup>
+              </Marker>
+          )})}
+          {newPin && (
+            <Marker
+              position={newPin}
+              draggable={true}
+              eventHandlers={eventHandlers}
+              ref={newPinMarkerRef}
+              icon={newPinIcon}
+            >
+              <Popup>新しいスポットの位置</Popup>
+            </Marker>
+          )}
+        </MapContainer>
 
-      <MapContainer
-        center={[34.6991604, 135.2167765]} // 初期表示: 兵庫県民美術館
-        zoom={16}
-        style={{ height: '100%', width: '100%', zIndex: 0 }}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        {loading && (
+          <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1000 }}>
+            <CircularProgress />
+          </Box>
+        )}
+      </Box>
+
+      {/* --- 右側: 既存のサイドバーに相当するエリア --- */}
+      <Box sx={{ width: 360, borderLeft: '1px solid #ddd', height: '100vh', display: 'flex' }}>
+        <SpotRegistrationForm
+          // 状態とその更新関数を全てpropsとして渡す
+          spotName={spotName} setSpotName={setSpotName}
+          subtitle={subtitle} setSubtitle={setSubtitle}
+          spotDescription={spotDescription} setSpotDescription={setSpotDescription}
+          address={address}
+          setAddress={setAddress}
+          imagePreview={imagePreview} setImagePreview={setImagePreview} setImageFile={setImageFile}
+          selectedArModelId={selectedArModelId} setSelectedArModelId={setSelectedArModelId}
+          category={category} setCategory={setCategory}
+          pinColor={pinColor} setPinColor={setPinColor}
+          radius={radius} setRadius={setRadius}
+          newPin={newPin}
+          addressLoading={addressLoading}
+          submitting={submitting}
+          arModels={arModels}
+          handleSubmit={handleSubmit}
+          handleImageChange={handleImageChange}
         />
-
-        {/* 登録済みのスポットをマーカーとして表示 */}
-        {spots.map((spot) => (
-          <Marker key={spot.id} position={[spot.latitude, spot.longitude]}>
-            <Popup>
-              <Typography variant="subtitle2" component="div">{spot.name}</Typography>
-              <Typography variant="body2">{spot.description}</Typography>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* 新しく追加するスポットのマーカー */}
-        {newSpotPosition && <Marker position={newSpotPosition}></Marker>}
-
-        {/* 地図のクリックイベントをハンドリング */}
-        <AddSpotMarker onMapClick={handleMapClick} />
-      </MapContainer>
-
-      {/* スポット情報入力モーダル */}
-      <Dialog open={isModalOpen} onClose={handleCloseModal}>
-        <DialogTitle>新しいスポットを作成</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            スポットの名前と詳細を入力してください。
-          </DialogContentText>
-          <TextField
-            autoFocus
-            margin="dense"
-            id="name"
-            label="スポット名"
-            type="text"
-            fullWidth
-            variant="standard"
-            value={spotName}
-            onChange={(e) => setSpotName(e.target.value)}
-            required
-          />
-          <TextField
-            margin="dense"
-            id="description"
-            label="詳細"
-            type="text"
-            fullWidth
-            multiline
-            rows={4}
-            variant="standard"
-            value={spotDescription}
-            onChange={(e) => setSpotDescription(e.target.value)}
-          />
-           {newSpotPosition && (
-            <Typography variant="caption" color="text.secondary" sx={{mt:2}}>
-              緯度: {newSpotPosition.lat.toFixed(6)}, 経度: {newSpotPosition.lng.toFixed(6)}
-            </Typography>
-           )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseModal}>キャンセル</Button>
-          <Button onClick={handleSaveSpot} disabled={isLoading}>
-            {isLoading ? <CircularProgress size={24} /> : '保存'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      </Box>
+      <Snackbar
+      open={snackbarOpen}
+      autoHideDuration={4000} // 4秒で自動的に閉じる
+      onClose={() => setSnackbarOpen(false)}
+      anchorOrigin={{ vertical: 'top', horizontal: 'center' }} // 表示位置
+    >
+      <Alert onClose={() => setSnackbarOpen(false)} 
+      severity="success"
+      sx={{ width: '200%',
+      fontSize: '1.1rem',
+      alignItems: 'center',
+      '& .MuiAlert-icon': {
+        fontSize: '28px',}
+      }}>
+        登録が完了しました！
+      </Alert>
+    </Snackbar>
     </Box>
   );
 };
 
-export default SpotRegistrationMap;
+export default MapRegisterPageLeaflet;

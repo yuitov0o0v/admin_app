@@ -1,3 +1,8 @@
+.custom-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
 /* @import "tailwindcss";
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;

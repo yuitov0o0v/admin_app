@@ -95,11 +95,15 @@ const PIN_COLORS = [
   { name: '緑', value: '#008000' },
   { name: '黄', value: '#FFFF00' },
   { name: '紫', value: '#800080' },
+  { name: '黒', value: '#000000' },
+  { name: '白', value: '#FFFFFF' },
+  { name: '灰', value: '#808080' },
+  { name: '茶', value: '#A52A2A' },
   { name: 'コーラルピンク', value: '#F8AFA6' },
   { name: 'マスタードイエロー', value: '#DDA448' },
   { name: 'セージグリーン', value: '#9DC183' },
   { name: 'ダスティブルー', value: '#6A89A4' },
-  { name: 'トープ', value: '' },
+  { name: 'トープ', value: '#483C32' },
 ];
 
 

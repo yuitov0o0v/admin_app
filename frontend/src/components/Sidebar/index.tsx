@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
 import SettingsIcon from '@mui/icons-material/Settings';
+import ListIcon from '@mui/icons-material/List';
 import MapIcon from '@mui/icons-material/Map';
 import InfoIcon from '@mui/icons-material/Info';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -45,6 +46,7 @@ const Sidebar: React.FC = () => {
   const menuItems: MenuItemData[] = [
     { text: 'ホーム', icon: <HomeIcon />, path: '/' },
     { text: 'スポット登録', icon: <MapIcon />, path: '/spotmap' },
+    { text: 'スポット一覧', icon: <ListIcon />, path: '/list' },
     { text: 'お知らせ', icon: <InfoIcon />, path: '/info' },
   ];
 

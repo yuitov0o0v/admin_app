@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaf
 import ReactDOMServer from 'react-dom/server'; // React要素を文字列に変換するために必要
 import L from 'leaflet';
 import { supabase } from '../../supabaseClient';
+import { useSupabaseStorage } from '../../hooks/useSupabaseStorage';
 import { Box, CircularProgress,  } from '@mui/material';
 import { LocationOn } from '@mui/icons-material';
 import { Snackbar, Alert } from '@mui/material';
@@ -130,6 +131,13 @@ const MapRegisterPageLeaflet: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
 
+  // Supabase Storage用のカスタムフック
+  const { uploadFile, isUploading, error: uploadError } = useSupabaseStorage();
+
+  // ファイル入力用のref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+
   // 新しいピンのアイコンをピンカラーに応じて動的に生成
   const newPinIcon = useMemo(() => {
     return createColorIcon(pinColor);
@@ -198,21 +206,38 @@ const MapRegisterPageLeaflet: React.FC = () => {
     [],
   );
 
-  // 3. 画像ファイルが選択された時の処理
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setImageFile(file);
-      // プレビュー用のURLを生成
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+  // 3. 画像ファイルが選択されたときの処理
+  const handleFileSelect = (file: File | null) => {
+    if (file) {
+        setImageFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setImagePreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
     }
   };
 
-  // 4. 登録ボタンを押したときの処理
+  // ファイル選択ダイアログを開く
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFileSelect(e.target.files?.[0] || null);
+  };
+
+  // 🔽 修正点2: ドラッグオーバー時の処理を追加
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // これがないと onDrop イベントが発火しない
+  };
+  // ドロップ時の処理
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileSelect(e.dataTransfer.files[0]);
+      e.dataTransfer.clearData();
+    }
+  };
+
+  // 4. フォームが送信されたときの処理
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!newPin || !spotName) {
@@ -224,26 +249,19 @@ const MapRegisterPageLeaflet: React.FC = () => {
     let imageUrl = '';
     // 画像が選択されていればStorageにアップロード
     if (imageFile) {
-        const fileName = `${Date.now()}_${imageFile.name}`;
-        // 【重要】'spot-images' はご自身のSupabase Storageのバケット名に置き換えてください
-        const { data, error } = await supabase.storage
-            .from('spot-images')
-            .upload(fileName, imageFile);
+      const newUrl = await uploadFile('spot_images', imageFile); // バケット名を指定
 
-        if (error) {
-            alert('画像のアップロードに失敗しました: ' + error.message);
-            setSubmitting(false);
-            return;
-        }
-
-        // アップロードした画像の公開URLを取得
-        const { data: publicUrlData } = supabase.storage
-            .from('spot-images')
-            .getPublicUrl(data.path);
-        
-        imageUrl = publicUrlData.publicUrl;
+      if (newUrl) {
+        // アップロードが成功したらURLをimageUrlに設定
+        imageUrl = newUrl;
+      } else {
+        // アップロードが失敗した場合
+        alert('画像のアップロードに失敗しました: ' + uploadError?.message);
+        setSubmitting(false);
+        return; // 処理を中断
+      }
     }
-    
+
     // DBに登録するデータ
     const spotData = {
       name: spotName,
@@ -370,6 +388,10 @@ const MapRegisterPageLeaflet: React.FC = () => {
           arModels={arModels}
           handleSubmit={handleSubmit}
           handleImageChange={handleImageChange}
+          isUploading={isUploading}
+          fileInputRef={fileInputRef}
+          handleDragOver={handleDragOver}
+          handleDrop={handleDrop}
         />
       </Box>
       <Snackbar
@@ -378,7 +400,7 @@ const MapRegisterPageLeaflet: React.FC = () => {
       onClose={() => setSnackbarOpen(false)}
       anchorOrigin={{ vertical: 'top', horizontal: 'center' }} // 表示位置
     >
-      <Alert onClose={() => setSnackbarOpen(false)} 
+      <Alert onClose={() => setSnackbarOpen(false)}
       severity="success"
       sx={{ width: '200%',
       fontSize: '1.1rem',

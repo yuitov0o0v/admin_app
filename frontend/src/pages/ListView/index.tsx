@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../supabaseClient'; // Supabaseクライアントのパスは適宜調整してください
+import { useSupabaseStorage } from '../../hooks/useSupabaseStorage'; // 作成したカスタムフックをインポート
 import {
   Container,
   Typography,
@@ -27,7 +28,7 @@ import {
   Select,
   MenuItem,
 } from '@mui/material';
-import { Edit, Delete } from '@mui/icons-material';
+import { Edit, Delete, CloudUpload } from '@mui/icons-material';
 
 // --- 型定義 ---
 interface Spot {
@@ -75,7 +76,7 @@ const SpotListPage: React.FC = () => {
   const [spots, setSpots] = useState<Spot[]>([]);
   const [arModels, setArModels] = useState<ARModel[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingSpot, setEditingSpot] = useState<Spot | null>(null);
 
@@ -83,6 +84,12 @@ const SpotListPage: React.FC = () => {
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' } | null>(null);
+
+  // 画像アップロード関連
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const { uploadFile, isUploading, error: uploadError } = useSupabaseStorage();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
 
   // --- データ取得 ---
@@ -118,29 +125,87 @@ const SpotListPage: React.FC = () => {
   // --- 編集関連の処理 ---
   const handleOpenEditDialog = (spot: Spot) => {
     setEditingSpot({ ...spot });
+    setPreviewUrl(spot.image_url || null);
     setEditDialogOpen(true);
   };
 
   const handleCloseEditDialog = () => {
     setEditDialogOpen(false);
     setEditingSpot(null);
+    setImageFile(null);
+    setPreviewUrl(null);
   };
 
   const handleEditFormChange = (field: keyof Spot, value: any) => {
     setEditingSpot(prev => prev ? { ...prev, [field]: value } : null);
   };
 
+  const handleFileSelect = (file: File | null ) => {
+    if(file) {
+      if (!file.type.startsWith('image/')) {
+        setSnackbar({ open: true, message: '画像ファイルを選択してください。', severity: 'error' });
+        return;
+      }
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFileSelect(e.target.files?.[0] || null);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault(); // デフォルトの動作を防ぎ、ドロップを可能にする
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileSelect(e.dataTransfer.files[0]);
+      e.dataTransfer.clearData();
+    }
+  };
+
   const handleUpdateSpot = async () => {
     if (!editingSpot) return;
-    const { id, ...updateData } = editingSpot;
-    const { error } = await supabase.from('spots').update(updateData).eq('id', id);
 
-    if (error) {
-      setSnackbar({ open: true, message: `更新に失敗しました: ${error.message}`, severity: 'error' });
-    } else {
-      setSnackbar({ open: true, message: '更新が完了しました。', severity: 'success' });
-      handleCloseEditDialog();
-      fetchData();
+    let imageUrlToUpdate = editingSpot.image_url;
+
+    // 新しい画像ファイルがあれば、カスタムフックを使ってアップロード処理を行う
+    if (imageFile) {
+      // 🚀 ここでカスタムフックの関数を呼び出すだけ！
+      const newUrl = await uploadFile('spot_images', imageFile);
+
+      if (newUrl) {
+        imageUrlToUpdate = newUrl;
+      } else {
+        // アップロード失敗時の処理
+        setSnackbar({ open: true, message: `画像アップロードに失敗しました: ${uploadError?.message}`, severity: 'error' });
+        return; // 更新処理を中断
+      }
+    }
+
+    // データベースの情報を更新
+    try {
+        const { id, ...updateData } = editingSpot;
+        const { error: dbError } = await supabase
+            .from('spots')
+            .update({ ...updateData, image_url: imageUrlToUpdate })
+            .eq('id', id);
+
+        if (dbError) throw dbError;
+
+        setSnackbar({ open: true, message: '更新が完了しました。', severity: 'success' });
+        handleCloseEditDialog();
+        fetchData();
+
+    } catch (error: any) {
+        setSnackbar({ open: true, message: `更新に失敗しました: ${error.message}`, severity: 'error' });
     }
   };
 
@@ -169,7 +234,7 @@ const SpotListPage: React.FC = () => {
     }
   };
 
-  
+
   // --- レンダリング ---
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>;
@@ -187,6 +252,7 @@ const SpotListPage: React.FC = () => {
               <TableCell>スポット名</TableCell>
               <TableCell>カテゴリ</TableCell>
               <TableCell>住所</TableCell>
+              <TableCell>イメージ画像</TableCell>
               <TableCell align="right">操作</TableCell>
             </TableRow>
           </TableHead>
@@ -197,6 +263,9 @@ const SpotListPage: React.FC = () => {
                 <TableCell>{spot.name}</TableCell>
                 <TableCell>{spot.category || '未設定'}</TableCell>
                 <TableCell>{spot.address || '未設定'}</TableCell>
+                <TableCell>
+                  {spot.image_url ? <img src={spot.image_url} alt={spot.name} style={{ width: 100, height: 'auto' }} /> : '未設定'}
+                </TableCell>
                 <TableCell align="right">
                   <IconButton onClick={() => handleOpenEditDialog(spot)}><Edit /></IconButton>
                   <IconButton onClick={() => handleOpenDeleteDialog(spot.id)}><Delete /></IconButton>
@@ -220,6 +289,52 @@ const SpotListPage: React.FC = () => {
               mt: 1,
             }}
           >
+            {/* === ここからが修正・追加箇所 === */}
+            <Box sx={{ width: '100%' }}>
+              <Typography variant="subtitle1" gutterBottom>イメージ画像</Typography>
+              <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  style={{ display: 'none' }}
+              />
+              <Box
+                  sx={{
+                      border: '2px dashed grey',
+                      borderRadius: 2,
+                      p: 2,
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      '&:hover': {
+                          borderColor: 'primary.main',
+                          backgroundColor: 'action.hover'
+                      },
+                      minHeight: 150,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'column',
+                      position: 'relative',
+                  }}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+              >
+                  {isUploading ? (
+                      <CircularProgress />
+                  ) : previewUrl ? (
+                      <img src={previewUrl} alt="プレビュー" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain' }} />
+                  ) : (
+                      <Box>
+                          <CloudUpload sx={{ fontSize: 40, mb: 1 }} />
+                          <Typography>クリック または ドラッグ&ドロップして画像をアップロード</Typography>
+                      </Box>
+                  )}
+              </Box>
+            </Box>
+             {/* === ここまでが修正・追加箇所 === */}
+
             <Box sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
               <TextField label="スポット名" fullWidth value={editingSpot?.name || ''} onChange={(e) => handleEditFormChange('name', e.target.value)} />
             </Box>
@@ -263,14 +378,12 @@ const SpotListPage: React.FC = () => {
               <FormControl fullWidth>
                 <InputLabel>ARモデル</InputLabel>
                 <Select
-                  // ★★★ ここが修正箇所 ★★★
-                  // number型のIDをtoString()でstring型に変換して渡す
                   value={editingSpot?.ar_model_id?.toString() || ''}
                   label="ARモデル"
                   onChange={(e) => handleEditFormChange('ar_model_id', e.target.value === '' ? null : Number(e.target.value))}
                 >
                    <MenuItem value=""><em>選択しない</em></MenuItem>
-                  {arModels.map(model => <MenuItem key={model.id} value={model.id}>{model.name}</MenuItem>)}
+                  {arModels.map(model => <MenuItem key={model.id} value={model.id.toString()}>{model.name}</MenuItem>)}
                 </Select>
               </FormControl>
             </Box>
@@ -278,15 +391,24 @@ const SpotListPage: React.FC = () => {
               <TextField label="判定範囲 (m)" type="number" fullWidth value={editingSpot?.radius || ''} onChange={(e) => handleEditFormChange('radius', Number(e.target.value))} />
             </Box>
             <Box sx={{ width: '100%' }}>
-              <TextField label="イメージ画像URL" fullWidth value={editingSpot?.image_url || ''} onChange={(e) => handleEditFormChange('image_url', e.target.value)} />
+              <TextField
+                label="イメージ画像URL"
+                fullWidth value={editingSpot?.image_url || ''}
+                onChange={(e) => handleEditFormChange('image_url', e.target.value)}
+                helperText="画像をアップロードするとこのURLは自動で更新されます。"
+                disabled={isUploading || imageFile !== null}
+              />
             </Box>
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseEditDialog}>キャンセル</Button>
-          <Button onClick={handleUpdateSpot} variant="contained">更新する</Button>
+          <Button onClick={handleCloseEditDialog} disabled={isUploading}>キャンセル</Button>
+          <Button onClick={handleUpdateSpot} variant="contained" disabled={isUploading}>
+            {isUploading ? <CircularProgress size={24} /> : '更新する'}
+          </Button>
         </DialogActions>
       </Dialog>
+
 
       {/* 削除確認ダイアログ */}
       <Dialog open={deleteDialogOpen} onClose={handleCloseDeleteDialog}>

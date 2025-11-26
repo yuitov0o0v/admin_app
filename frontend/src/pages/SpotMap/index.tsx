@@ -7,7 +7,7 @@ import { useSupabaseStorage } from '../../hooks/useSupabaseStorage';
 import { Box, CircularProgress,  } from '@mui/material';
 import { LocationOn } from '@mui/icons-material';
 import { Snackbar, Alert } from '@mui/material';
-import SpotRegistrationForm from '../../components/SpotRegistrationForm';
+import SpotRegistrationForm from '../../components/spotRegistrationForm';
 
 // LeafletのCSSをインポート
 import 'leaflet/dist/leaflet.css';

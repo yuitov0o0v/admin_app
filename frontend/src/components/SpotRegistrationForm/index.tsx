@@ -82,7 +82,7 @@ interface SpotRegistrationFormProps {
   handleImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void; // handleFileChangeとして利用
   handleDragOver: (e: React.DragEvent<HTMLElement>) => void; // ★ 追加
   handleDrop: (e: React.DragEvent<HTMLElement>) => void; // ★ 追加
-  fileInputRef: React.RefObject<HTMLInputElement>; // ★ 追加
+  fileInputRef: React.RefObject<HTMLInputElement | null>; // ★ 追加
 }
 
 

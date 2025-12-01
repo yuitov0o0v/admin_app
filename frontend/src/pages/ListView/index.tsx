@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../../supabaseClient'; // Supabaseクライアントのパスは適宜調整してください
+import { supabase } from '../../lib/supabaseClient'; // Supabaseクライアントのパスは適宜調整してください
 import { useSupabaseStorage } from '../../hooks/useSupabaseStorage'; // 作成したカスタムフックをインポート
 import {
   Container,

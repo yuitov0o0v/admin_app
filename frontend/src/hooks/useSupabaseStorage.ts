@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '../supabaseClient'; // Supabaseクライアントのパスは適宜調整
+import { supabase } from '../lib/supabaseClient'; // Supabaseクライアントのパスは適宜調整
 
 // フックが返す値の型を定義
 interface UseSupabaseStorageReturn {

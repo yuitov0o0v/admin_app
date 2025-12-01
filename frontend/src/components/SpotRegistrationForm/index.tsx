@@ -10,20 +10,22 @@ import {
   Select,
   MenuItem,
   Slider,
-  Avatar, // ARモデル選択UIで使用するため残します
+  Avatar,
 } from '@mui/material';
-import { CloudUpload } from '@mui/icons-material'; // アイコンを変更
+import { CloudUpload } from '@mui/icons-material';
 
-// --- 型定義 (親コンポーネントからインポートして使用することを想定) ---
+// --- 型定義 ---
 interface ARModel {
-  id: number;
-  name: string;
-  image_url: string;
+  id: string;
+  model_name: string;
+  file_url: string;
 }
+
 interface NewPin {
   lat: number;
   lng: number;
 }
+
 const CATEGORIES = ['観光', 'グルメ', 'イベント', 'アート', 'その他'];
 const PIN_COLORS = [
   { name: '赤', value: '#FF0000' },
@@ -41,18 +43,16 @@ const PIN_COLORS = [
   { name: 'ダスティブルー', value: '#6A89A4' },
   { name: 'トープ', value: '#483C32' },
 ];
-// --- ここまで ---
-
 
 // --- Propsの型定義 ---
 interface SpotRegistrationFormProps {
-  // 状態
+  // 状態 (値)
   spotName: string;
   subtitle: string;
   spotDescription: string;
   address: string;
-  imagePreview: string | null; // previewUrlとして利用
-  selectedArModelId: number | '';
+  imagePreview: string | null; // 表示用URL
+  selectedArModelId: string | '';
   category: string;
   pinColor: string;
   radius: number;
@@ -62,29 +62,25 @@ interface SpotRegistrationFormProps {
   setSubtitle: (value: string) => void;
   setSpotDescription: (value: string) => void;
   setAddress: (value: string) => void;
-  setImageFile: (file: File | null) => void;
-  setImagePreview: (url: string | null) => void;
-  setSelectedArModelId: (value: number | '') => void;
+  setSelectedArModelId: (value: string | '') => void;
   setCategory: (value: string) => void;
   setPinColor: (value: string) => void;
   setRadius: (value: number) => void;
-  // setImageFile と setImagePreview は handleImageChange に内包される想定
-  
+
   // UI制御用の状態
   newPin: NewPin | null;
   addressLoading: boolean;
   submitting: boolean;
   arModels: ARModel[];
-  isUploading: boolean; // ★ 追加
+  isUploading: boolean;
 
   // イベントハンドラ
   handleSubmit: (event: React.FormEvent) => void;
-  handleImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void; // handleFileChangeとして利用
-  handleDragOver: (e: React.DragEvent<HTMLElement>) => void; // ★ 追加
-  handleDrop: (e: React.DragEvent<HTMLElement>) => void; // ★ 追加
-  fileInputRef: React.RefObject<HTMLInputElement | null>; // ★ 追加
+  handleImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleDragOver: (e: React.DragEvent<HTMLElement>) => void;
+  handleDrop: (e: React.DragEvent<HTMLElement>) => void;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
 }
-
 
 const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
   spotName, setSpotName,
@@ -102,10 +98,10 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
   arModels,
   handleSubmit,
   handleImageChange,
-  isUploading,      // ★ 追加
-  handleDragOver,   // ★ 追加
-  handleDrop,       // ★ 追加
-  fileInputRef,     // ★ 追加
+  isUploading,
+  handleDragOver,
+  handleDrop,
+  fileInputRef,
 }) => {
   // フォームが無効かどうかを判定
   const isFormDisabled = !newPin || submitting;
@@ -173,14 +169,14 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
         }}
       />
 
-      {/* --- 画像アップロード (ここから差し替え) --- */}
+      {/* --- 画像アップロードエリア --- */}
       <Box sx={{ width: '100%' }}>
         <Typography variant="subtitle1" gutterBottom>イメージ画像</Typography>
         <input
             type="file"
             accept="image/*"
             ref={fileInputRef}
-            onChange={handleImageChange} // 既存のハンドラを適用
+            onChange={handleImageChange}
             style={{ display: 'none' }}
         />
         <Box
@@ -208,7 +204,7 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
         >
             {isUploading ? (
                 <CircularProgress />
-            ) : imagePreview ? ( // imagePreview を previewUrl として利用
+            ) : imagePreview ? (
                 <img src={imagePreview} alt="プレビュー" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain' }} />
             ) : (
                 <Box>
@@ -218,7 +214,6 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
             )}
         </Box>
       </Box>
-      {/* --- (ここまで) --- */}
       
       {/* --- 詳細設定 --- */}
       <FormControl fullWidth size="small" disabled={isFormDisabled}>
@@ -226,14 +221,14 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
         <Select 
           value={selectedArModelId} 
           label="ARモデル" 
-          onChange={(e) => setSelectedArModelId(e.target.value as number | '')}
+          onChange={(e) => setSelectedArModelId(e.target.value as string | '')}
         >
           <MenuItem value=""><em>選択しない</em></MenuItem>
           {arModels.map((model) => (
             <MenuItem key={model.id} value={model.id}>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Avatar src={model.image_url} sx={{ width: 24, height: 24, mr: 1 }} variant="square" />
-                {model.name}
+                <Avatar src={model.file_url} sx={{ width: 24, height: 24, mr: 1 }} variant="square" />
+                {model.model_name}
               </Box>
             </MenuItem>
           ))}

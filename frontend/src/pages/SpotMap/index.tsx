@@ -1,35 +1,30 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
-import ReactDOMServer from 'react-dom/server'; // React要素を文字列に変換するために必要
+import ReactDOMServer from 'react-dom/server';
 import L from 'leaflet';
-import { supabase } from '../../supabaseClient';
+import { supabase } from '../../lib/supabaseClient';
 import { useSupabaseStorage } from '../../hooks/useSupabaseStorage';
-import { Box, CircularProgress,  } from '@mui/material';
+import { Box, CircularProgress, Snackbar, Alert } from '@mui/material'; // import修正
 import { LocationOn } from '@mui/icons-material';
-import { Snackbar, Alert } from '@mui/material';
+
+// パスは実際の配置場所に合わせて確認してください
 import SpotRegistrationForm from '../../components/spotRegistrationForm';
 
-// LeafletのCSSをインポート
 import 'leaflet/dist/leaflet.css';
-
-// --- Leafletのデフォルトアイコン設定 ---
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
-// Material-UIのLocationOnアイコンを使ってカスタムアイコンを作成する関数
+// --- アイコン設定 ---
 const createColorIcon = (color: string) => {
-  // Material-UIのアイコンをSVG文字列としてレンダリング
   const iconSvgString = ReactDOMServer.renderToString(
     <LocationOn style={{ color: color, fontSize: '40px' }} />
   );
 
   return L.divIcon({
     html: iconSvgString,
-    // アイコンのサイズとアンカー（先端）の位置を調整
     iconSize: [40, 40],
-    iconAnchor: [20, 40], // アイコンの先端が座標に合うように調整
+    iconAnchor: [20, 40],
     popupAnchor: [0, -40],
-    // divIconのデフォルトスタイルを無効化するためのクラス名
     className: 'custom-div-icon'
   });
 };
@@ -43,44 +38,38 @@ let DefaultIcon = L.icon({
     shadowSize: [41, 41]
 });
 L.Marker.prototype.options.icon = DefaultIcon;
-// --- ここまで ---
 
 // --- 型定義 ---
-// DBのspotsテーブルの型定義
 interface Spot {
-  id: number;
+  id: string;
   name: string;
   description: string;
   latitude: number;
   longitude: number;
-  subtitle?: string;
-  address?: string;
-  image_url?: string;
-  ar_model_id?: number;
-  category?: string;
-  pin_color?: string;
-  radius?: number;
+  subtitle: string | null; // ✅ DBの型に合わせる
+  address: string;   // ✅ DBの型に合わせる
+  image_url: string | null; // ✅ image_urlも同様にnull許容にすべき
+  ar_model_id: string | null; // ✅ null許容かつ number型に統一（ARModelも同様に修正が必要）
+  category: string | null;  // ✅ null許容に修正
+  pin_color: string | null; // ✅ pin_colorやradiusもDBの設定次第でnull許容の可能性があります
+  radius: number | null;
 }
 
-// ARモデルの型定義
 interface ARModel {
-  id: number;
-  name: string;
-  image_url: string;
+  id: string;
+  model_name: string;
+  file_url: string;
 }
 
-// 新規ピンの型定義
 interface NewPin {
   lat: number;
   lng: number;
 }
 
-// MapClickHandlerコンポーネントのpropsの型を定義
 interface MapClickHandlerProps {
   onMapClick: (latlng: L.LatLng) => void;
 }
 
-// 地図クリックイベントをハンドリングするためのコンポーネント
 function MapClickHandler({ onMapClick }: MapClickHandlerProps) {
   useMapEvents({
     click(e) {
@@ -107,13 +96,12 @@ const PIN_COLORS = [
   { name: 'トープ', value: '#483C32' },
 ];
 
-
 const MapRegisterPageLeaflet: React.FC = () => {
   const [spots, setSpots] = useState<Spot[]>([]);
   const [newPin, setNewPin] = useState<NewPin | null>(null);
   const newPinMarkerRef = useRef<L.Marker>(null);
 
-  // --- フォーム用のState (全てこのコンポーネントで管理) ---
+  // --- フォーム用のState ---
   const [spotName, setSpotName] = useState('');
   const [spotDescription, setSpotDescription] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -122,7 +110,7 @@ const MapRegisterPageLeaflet: React.FC = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [arModels, setArModels] = useState<ARModel[]>([]);
-  const [selectedArModelId, setSelectedArModelId] = useState<number | ''>('');
+  const [selectedArModelId, setSelectedArModelId] = useState<string | ''>('');
   const [category, setCategory] = useState<string>('');
   const [pinColor, setPinColor] = useState<string>(PIN_COLORS[0].value);
   const [radius, setRadius] = useState<number>(50);
@@ -131,19 +119,14 @@ const MapRegisterPageLeaflet: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
 
-  // Supabase Storage用のカスタムフック
   const { uploadFile, isUploading, error: uploadError } = useSupabaseStorage();
-
-  // ファイル入力用のref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-
-  // 新しいピンのアイコンをピンカラーに応じて動的に生成
   const newPinIcon = useMemo(() => {
     return createColorIcon(pinColor);
   }, [pinColor]);
-  // --- データ取得関連 ---
-  // 既存のスポットをSupabaseから取得
+
+  // --- データ取得 ---
   const fetchSpots = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase.from('spots').select('*');
@@ -157,21 +140,23 @@ const MapRegisterPageLeaflet: React.FC = () => {
 
   // ARモデルをSupabaseから取得
   const fetchArModels = useCallback(async () => {
-    const { data, error } = await supabase.from('ar_models').select('id, name, image_url');
+    // テーブル名は 'ar_model' で続行
+    const { data, error } = await supabase.from('ar_model').select('id, model_name, file_url');
+
     if (error) {
       console.error('Error fetching AR models:', error);
     } else {
-      setArModels(data || []);
+      // dataがnullでないことを保証してからセット
+      setArModels(data || []); // ✅ dataがnullの場合のハンドリングを強化
     }
   }, []);
 
-  // 初期表示時にスポットとARモデルを取得
   useEffect(() => {
     fetchSpots();
     fetchArModels();
   }, [fetchSpots, fetchArModels]);
   
-  // --- フォームのリセット ---
+  // --- フォームリセット ---
   const resetForm = () => {
       setNewPin(null);
       setSpotName('');
@@ -186,13 +171,11 @@ const MapRegisterPageLeaflet: React.FC = () => {
       setRadius(50);
   }
 
-  // --- イベントハンドラ ---
-  // 1. 地図をクリックしたときの処理
+  // --- ハンドラ ---
   const handleMapClick = (latlng: L.LatLng) => {
     setNewPin({ lat: latlng.lat, lng: latlng.lng });
   };
 
-  // 2. 新規ピンをドラッグで微調整したときの処理
   const eventHandlers = useMemo(
     () => ({
       dragend() {
@@ -206,7 +189,6 @@ const MapRegisterPageLeaflet: React.FC = () => {
     [],
   );
 
-  // 3. 画像ファイルが選択されたときの処理
   const handleFileSelect = (file: File | null) => {
     if (file) {
         setImageFile(file);
@@ -218,17 +200,14 @@ const MapRegisterPageLeaflet: React.FC = () => {
     }
   };
 
-  // ファイル選択ダイアログを開く
-
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     handleFileSelect(e.target.files?.[0] || null);
   };
 
-  // 🔽 修正点2: ドラッグオーバー時の処理を追加
   const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault(); // これがないと onDrop イベントが発火しない
+    e.preventDefault();
   };
-  // ドロップ時の処理
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
@@ -237,7 +216,6 @@ const MapRegisterPageLeaflet: React.FC = () => {
     }
   };
 
-  // 4. フォームが送信されたときの処理
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!newPin || !spotName) {
@@ -247,29 +225,25 @@ const MapRegisterPageLeaflet: React.FC = () => {
     setSubmitting(true);
 
     let imageUrl = '';
-    // 画像が選択されていればStorageにアップロード
     if (imageFile) {
-      const newUrl = await uploadFile('spot_images', imageFile); // バケット名を指定
-
+      // バケット名 'spot_images' は環境に合わせて確認してください
+      const newUrl = await uploadFile('spot_images', imageFile); 
       if (newUrl) {
-        // アップロードが成功したらURLをimageUrlに設定
         imageUrl = newUrl;
       } else {
-        // アップロードが失敗した場合
         alert('画像のアップロードに失敗しました: ' + uploadError?.message);
         setSubmitting(false);
-        return; // 処理を中断
+        return;
       }
     }
 
-    // DBに登録するデータ
     const spotData = {
       name: spotName,
       description: spotDescription,
       latitude: newPin.lat,
       longitude: newPin.lng,
       subtitle: subtitle || null,
-      address: address || null,
+      address: address ,
       image_url: imageUrl || null,
       ar_model_id: selectedArModelId || null,
       category: category || null,
@@ -277,20 +251,19 @@ const MapRegisterPageLeaflet: React.FC = () => {
       radius: radius,
     };
 
-    const { error } = await supabase.from('spots').insert(spotData);
+    const { error } = await supabase.from('spots').insert(spotData) as { error: any };
 
     if (error) {
       alert('登録に失敗しました: ' + error.message);
     } else {
-      // alert('登録が完了しました！');
-      setSnackbarOpen(true); // スナックバーを表示
-      resetForm(); // フォームをリセット
+      setSnackbarOpen(true);
+      resetForm();
       await fetchSpots();
     }
     setSubmitting(false);
   };
 
-  // 緯度経度から住所を自動取得する
+  // 住所取得
   useEffect(() => {
     if (!newPin) {
       setAddress('');
@@ -318,13 +291,12 @@ const MapRegisterPageLeaflet: React.FC = () => {
     fetchAddress();
   }, [newPin]);
 
-
   return (
     <Box sx={{ display: 'flex', width: '100%', height: '100vh' }}>
-      {/* --- 左側: マップ表示エリア --- */}
+      {/* --- 左側: マップ --- */}
       <Box sx={{ flex: 1, position: 'relative' }}>
         <MapContainer
-          center={[34.69944, 135.21833]} // 兵庫県立美術館
+          center={[34.69944, 135.21833]}
           zoom={17}
           style={{ height: '100%', width: '100%' }}
         >
@@ -334,7 +306,7 @@ const MapRegisterPageLeaflet: React.FC = () => {
           />
           <MapClickHandler onMapClick={handleMapClick} />
           {spots.map((spot) => {
-            const color = spot.pin_color || '#2A81CB'; // デフォルトはLeaflet標準のような青色
+            const color = spot.pin_color || '#2A81CB';
             const spotIcon = createColorIcon(color);
             return(
               <Marker
@@ -368,16 +340,16 @@ const MapRegisterPageLeaflet: React.FC = () => {
         )}
       </Box>
 
-      {/* --- 右側: 既存のサイドバーに相当するエリア --- */}
+      {/* --- 右側: 登録フォーム --- */}
       <Box sx={{ width: 360, borderLeft: '1px solid #ddd', height: '100vh', display: 'flex' }}>
         <SpotRegistrationForm
-          // 状態とその更新関数を全てpropsとして渡す
           spotName={spotName} setSpotName={setSpotName}
           subtitle={subtitle} setSubtitle={setSubtitle}
           spotDescription={spotDescription} setSpotDescription={setSpotDescription}
-          address={address}
-          setAddress={setAddress}
-          imagePreview={imagePreview} setImagePreview={setImagePreview} setImageFile={setImageFile}
+          address={address} setAddress={setAddress}
+          imagePreview={imagePreview}
+          // Note: setImageFile と setImagePreview は親コンポーネントで管理し
+          // handleImageChange で更新するため、Propsとしては渡さない
           selectedArModelId={selectedArModelId} setSelectedArModelId={setSelectedArModelId}
           category={category} setCategory={setCategory}
           pinColor={pinColor} setPinColor={setPinColor}
@@ -395,22 +367,19 @@ const MapRegisterPageLeaflet: React.FC = () => {
         />
       </Box>
       <Snackbar
-      open={snackbarOpen}
-      autoHideDuration={4000} // 4秒で自動的に閉じる
-      onClose={() => setSnackbarOpen(false)}
-      anchorOrigin={{ vertical: 'top', horizontal: 'center' }} // 表示位置
-    >
-      <Alert onClose={() => setSnackbarOpen(false)}
-      severity="success"
-      sx={{ width: '200%',
-      fontSize: '1.1rem',
-      alignItems: 'center',
-      '& .MuiAlert-icon': {
-        fontSize: '28px',}
-      }}>
-        登録が完了しました！
-      </Alert>
-    </Snackbar>
+        open={snackbarOpen}
+        autoHideDuration={4000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setSnackbarOpen(false)}
+          severity="success"
+          sx={{ width: '100%', fontSize: '1.1rem', alignItems: 'center' }}
+        >
+          登録が完了しました！
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

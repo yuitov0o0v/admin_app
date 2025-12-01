@@ -1,65 +1,71 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
-import type { ReactNode } from "react";
-import type { Session, User } from "@supabase/supabase-js";
+// src/context/AuthContext.tsx
+import { createContext, useContext, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import type{ Session, User } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabaseClient';
 
-interface AuthContextType {
+type AuthContextType = {
+  session: Session | null;
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<any>;
-  signUp: (email: string, password: string) => Promise<any>;
-  signOut: () => Promise<void>;
-}
+  isAdmin: boolean; // これで画面の出し分けをします
+};
 
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({
+  session: null,
+  user: null,
+  loading: true,
+  isAdmin: false,
+});
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    // セッションの初期チェック
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
+    // 1. 初期ロード時のセッション取得
+    const initSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
       setUser(session?.user ?? null);
+      checkRole(session?.user);
+      setLoading(false);
+    };
+
+    initSession();
+
+    // 2. ログイン/ログアウトの監視
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      checkRole(session?.user);
       setLoading(false);
     });
 
-    // 認証状態の変更を監視
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session: Session | null) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => listener.subscription.unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    return data;
-  };
-
-  const signUp = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
-    return data;
-  };
-
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+  // ロールの判定ロジック
+  const checkRole = (currentUser: User | undefined | null) => {
+    if (!currentUser) {
+      setIsAdmin(false);
+      return;
+    }
+    // DBの handle_new_user 関数が user_metadata に role を書き込んでくれています
+    // これを参照するのが一番速いです
+    const role = currentUser.app_metadata?.role;
+    console.log('Current Role:', role); // デバッグ用ログ
+    setIsAdmin(role === 'admin');
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
-      {children}
+    <AuthContext.Provider value={{ session, user, loading, isAdmin }}>
+      {!loading && children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+// ほかのコンポーネントから簡単に呼び出せるようにするフック
+export const useAuth = () => useContext(AuthContext);

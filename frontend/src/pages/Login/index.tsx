@@ -1,148 +1,105 @@
-import React, { useState, useContext } from 'react';
-import type { FormEvent } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { AuthContext } from '../../context/AuthContext';
-
-// Material-UI Components
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import TextField from '@mui/material/TextField';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import Link from '@mui/material/Link';
-import Avatar from '@mui/material/Avatar';
-
-// Material-UI Icons
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import Visibility from '@mui/icons-material/Visibility';
-import VisibilityOff from '@mui/icons-material/VisibilityOff';
-import InputAdornment from '@mui/material/InputAdornment';
-import IconButton from '@mui/material/IconButton';
+// src/pages/Login.tsx
+import React, { useState } from 'react';
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
+import { authApi } from '../../lib/api/auth';
+import {
+  Container,
+  Box,
+  Typography,
+  TextField,
+  Button,
+  Alert,
+  Paper,
+  Link
+} from '@mui/material';
 
 const Login: React.FC = () => {
-  const { signIn } = useContext(AuthContext)!;
   const navigate = useNavigate();
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const location = useLocation();
+  const from = (location.state as any)?.from?.pathname || '/'; // ログイン後のリダイレクト先
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
     try {
-      await signIn(email, password);
-      navigate('/');
+      const { error } = await authApi.signIn(email, password);
+      if (error) throw error;
+      // AuthContextが自動でsession変更を検知するので、単に遷移するだけでOK
+      navigate(from, { replace: true });
     } catch (err: any) {
-      const errorMessage = err.code === 'auth/invalid-credential'
-        ? 'メールアドレスまたはパスワードが間違っています。'
-        : 'ログイン中にエラーが発生しました。';
-      setError(errorMessage);
+      setError(err.message || 'Failed to login');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        backgroundColor: '#f5f5f5',
-      }}
-    >
-      <Paper
-        elevation={6}
+    <Container component="main" maxWidth="xs">
+      <Box
         sx={{
-          padding: 4,
+          marginTop: 8,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          maxWidth: 400,
-          width: '100%',
         }}
       >
-        <Avatar sx={{ m: 1, bgcolor: '#1976d2' }}>
-          <LockOutlinedIcon />
-        </Avatar>
-        <Typography component="h1" variant="h5">
-          ログイン
-        </Typography>
-        <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
-          <Stack spacing={2}>
+        <Paper elevation={3} sx={{ p: 4, width: '100%', borderRadius: 2 }}>
+          <Typography component="h1" variant="h5" align="center" gutterBottom>
+            Sign in
+          </Typography>
+          
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+          <Box component="form" onSubmit={handleSubmit} noValidate>
             <TextField
-              label="メールアドレス"
-              type="email"
+              margin="normal"
+              required
+              fullWidth
+              id="email"
+              label="Email Address"
+              name="email"
+              autoComplete="email"
+              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
-              fullWidth
-              autoFocus
             />
             <TextField
-              label="パスワード"
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              margin="normal"
               required
               fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      aria-label="toggle password visibility"
-                      onClick={() => setShowPassword(!showPassword)}
-                      onMouseDown={(e) => e.preventDefault()}
-                      edge="end"
-                    >
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
+              name="password"
+              label="Password"
+              type="password"
+              id="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
             />
-            {error && <Alert severity="error">{error}</Alert>}
             <Button
               type="submit"
               fullWidth
               variant="contained"
+              sx={{ mt: 3, mb: 2 }}
               disabled={loading}
-              sx={{ mt: 2, mb: 2, position: 'relative' }}
             >
-              {loading && (
-                <CircularProgress
-                  size={24}
-                  sx={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    marginTop: '-12px',
-                    marginLeft: '-12px',
-                  }}
-                />
-              )}
-              ログイン
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
-            <Box sx={{ textAlign: 'center', mt: 2 }}>
-              <Typography variant="body2">
-                アカウントをお持ちでない方は{' '}
-                <Link component={RouterLink} to="/signup" variant="body2">
-                  こちら
-                </Link>
-              </Typography>
+            <Box textAlign="center">
+              <Link component={RouterLink} to="/signup" variant="body2">
+                {"Don't have an account? Sign Up"}
+              </Link>
             </Box>
-          </Stack>
-        </Box>
-      </Paper>
-    </Box>
+          </Box>
+        </Paper>
+      </Box>
+    </Container>
   );
 };
 

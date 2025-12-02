@@ -1,162 +1,89 @@
-import { useEffect, useState } from 'react';
-import { supabase } from './lib/supabaseClient';
-import { useAuth } from './context/AuthContext';
-import type{ Database } from './types/supabase';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 
-// 型定義から UserProfile の型を取り出す便利テクニック
-type UserProfile = Database['public']['Tables']['user_profile']['Row'];
+// 認証コンテキスト
+import { AuthProvider } from './context/AuthContext';
 
-function App() {
-  const { user, isAdmin, loading } = useAuth(); // Contextから一発で取得！
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [emailInput, setEmailInput] = useState('');
+// コンポーネント
+import { PrivateRoute } from './components/ProtectedRoute';
+import Layout from './components/Layout';
 
-  // ログイン時のみプロフィールを取得
-  useEffect(() => {
-    if (user) fetchProfile();
-  }, [user]);
+// ページ (まだ作成していないものはプレースホルダーとしてインポートを想定)
+import Login from './pages/LogIn';
+import Signup from './pages/SignUp';
+import Home from './pages/Home';
+import SpotMap from './pages/SpotMap';
+import ListView from './pages/ListView'; // "List" は予約語と競合しやすいため ListView 推奨
+import Info from './pages/Info';
+import Setting from './pages/Setting';
 
-  const fetchProfile = async () => {
-    if (!user) return;
-    
-    // RLSのおかげで、user_id を指定しなくても「自分のデータ」しか返ってこないはずですが、
-    // 明示的に eq('user_id', user.id) を書くのが一般的です。
-    const { data, error } = await supabase
-      .from('user_profile')
-      .select('*')
-      .eq('user_id', user.id)
-      .single(); // 1件だけ取得
+// MUIテーマ設定
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#1976d2', // アプリのメインカラー
+    },
+    secondary: {
+      main: '#dc004e',
+    },
+    background: {
+      default: '#f5f5f5', // 全体の背景色（薄いグレー）
+    },
+  },
+  typography: {
+    fontFamily: [
+      '-apple-system',
+      'BlinkMacSystemFont',
+      '"Segoe UI"',
+      'Roboto',
+      '"Helvetica Neue"',
+      'Arial',
+      'sans-serif',
+    ].join(','),
+  },
+});
 
-    if (error) {
-      console.error('Error fetching profile:', error);
-    } else {
-      setProfile(data);
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const { error } = await supabase.auth.signInWithOtp({ email: emailInput });
-    if (error) alert(error.message);
-    else alert('ログインリンクを送信しました');
-  };
-
-  const handleLogout = () => supabase.auth.signOut();
-
-  if (loading) return <div>Loading...</div>;
-
+const App: React.FC = () => {
   return (
-    <div style={{ padding: '2rem' }}>
-      {!user ? (
-        // 未ログイン時の表示
-        <form onSubmit={handleLogin}>
-          <h1>ログイン</h1>
-          <input
-            type="email"
-            value={emailInput}
-            onChange={(e) => setEmailInput(e.target.value)}
-            placeholder="Email"
-            required
-          />
-          <button type="submit">送信</button>
-        </form>
-      ) : (
-        // ログイン時の表示
-        <div>
-          <h1>ようこそ！</h1>
-          <div style={{ padding: '1rem', border: '1px solid #ccc', borderRadius: '8px' }}>
-            <h2>基本情報 (Auth)</h2>
-            <p>Email: {user.email}</p>
-            <p>
-              権限: <strong style={{ color: isAdmin ? 'red' : 'green' }}>
-                {isAdmin ? '管理者 (Admin)' : '一般ユーザー (User)'}
-              </strong>
-            </p>
-          </div>
+    <ThemeProvider theme={theme}>
+      {/* ブラウザ間のスタイル差分をリセットし、基本的なMUIスタイルを適用 */}
+      <CssBaseline />
+      
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* --- Public Routes (未ログインでアクセス可能) --- */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            
+            {/* ルートへの直接アクセスで未ログインならLoginへ (PrivateRouteが処理しますが明示的に書いてもOK) */}
+            
+            {/* --- Protected Routes (ログイン必須) --- */}
+            {/* 1. まず PrivateRoute で認証チェック */}
+            <Route element={<PrivateRoute />}>
+              {/* 2. 認証OKなら Layout を適用 (ヘッダー・サイドバー表示) */}
+              <Route element={<Layout />}>
+                
+                {/* ダッシュボード */}
+                <Route path="/" element={<Home />} />
+                
+                {/* 機能ページ */}
+                <Route path="/map" element={<SpotMap />} />
+                <Route path="/list" element={<ListView />} />
+                <Route path="/info" element={<Info />} />
+                <Route path="/setting" element={<Setting />} />
+                
+              </Route>
+            </Route>
 
-          <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #007bff', borderRadius: '8px' }}>
-            <h2>プロフィール情報 (DB: user_profile)</h2>
-            {profile ? (
-              <>
-                <p>ユーザーID: {profile.user_id}</p>
-                <p>登録日: {new Date(profile.created_at).toLocaleString()}</p>
-                <p>ロール(DB値): {profile.role}</p>
-              </>
-            ) : (
-              <p>プロフィールを読み込み中...</p>
-            )}
-          </div>
-
-          <button onClick={handleLogout} style={{ marginTop: '20px' }}>ログアウト</button>
-          
-          {/* Adminだけに表示される秘密のボタン */}
-          {isAdmin && (
-            <div style={{ marginTop: '20px', padding: '10px', background: '#ffebee' }}>
-              <h3>👑 管理者エリア</h3>
-              <p>ここにはスポット管理画面へのリンクなどを置きます</p>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            {/* 定義されていないパスへのアクセスはホーム（またはログイン）へリダイレクト */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
-}
+};
 
 export default App;
-
-// import React from 'react';
-// import { AuthProvider } from './context/AuthContext';
-// import { ThemeProvider, createTheme } from '@mui/material/styles';
-// import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-// import { ProtectedRoute } from './components/ProtectedRoute';
-// import Layout from './components/Layout'; // 👈 レイアウトコンポーネント
-// import Login from './pages/Login';
-// import Signup from './pages/Signup';
-// import Info from './pages/Info';
-// import Setting from './pages/Setting';
-// import SpotMap from './pages/SpotMap';
-// import List from './pages/ListView';
-// import Home from './pages/Home';
-// import TestComponent from './tests/AuthSignUp';
-// // import Profile from './pages/Profile'; // 例：他の保護されたページ
-
-// // MUIのテーマを作成
-// const theme = createTheme();
-
-
-// const App: React.FC = () => {
-//   return (
-//     <ThemeProvider theme={theme}>
-//       <AuthProvider>
-//         <Router>
-//           <Routes>
-//             {/* --- 公開ルート --- */}
-//             {/* このルートにはサイドバーのレイアウトは適用されません */}
-//             <Route path="/login" element={<Login />} />
-//             <Route path="/signup" element={<Signup />} />
-//             <Route path="/test" element={<TestComponent />} />
-
-//             {/* --- 保護されたルート --- */}
-//             {/* この親ルートが、配下の子ルートをすべて保護し、レイアウトを適用します */}
-//             <Route
-//               element={
-//                 <ProtectedRoute>
-//                   <Layout />
-//                 </ProtectedRoute>
-//               }
-//             >
-//               {/* ここにネストされたルートはすべてログインが必要になり、サイドバーが表示されます */}
-//               <Route path="/" element={<Home />} />
-//               <Route path="/SpotMap" element={<SpotMap />} />
-//               <Route path="/List" element={<List />} />
-//               <Route path="/info" element={<Info />} />
-//               <Route path="/setting" element={<Setting />} />
-//             </Route>
-//           </Routes>
-//         </Router>
-//       </AuthProvider>
-//     </ThemeProvider>
-//   );
-// };
-
-// export default App;

@@ -19,6 +19,7 @@ import ListView from './pages/listview'; // "List" は予約語と競合しや�
 import Info from './pages/info';
 import Invitation from './pages/invitation';
 import Setting from './pages/setting';
+import ArModelView from './pages/armodelview';
 
 // MUIテーマ設定
 const theme = createTheme({
@@ -76,6 +77,7 @@ const App: React.FC = () => {
                   <Route path="/spotmap" element={<SpotMap />} />
                   <Route path="/events" element={<EventView />} />
                   <Route path="/list" element={<ListView />} />
+                  <Route path="/ar-models" element={<ArModelView />} />
                   <Route path="/info" element={<Info />} />
                   <Route path="/setting" element={<Setting />} />
                   <Route path="/invitation" element={<Invitation />} />

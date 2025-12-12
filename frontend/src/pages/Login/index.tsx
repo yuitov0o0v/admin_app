@@ -1,48 +1,56 @@
-import React, { useState, useContext } from 'react';
-import type { FormEvent } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { AuthContext } from '../../context/AuthContext';
-
-// Material-UI Components
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import TextField from '@mui/material/TextField';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import Link from '@mui/material/Link';
-import Avatar from '@mui/material/Avatar';
-
-// Material-UI Icons
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import Visibility from '@mui/icons-material/Visibility';
-import VisibilityOff from '@mui/icons-material/VisibilityOff';
-import InputAdornment from '@mui/material/InputAdornment';
-import IconButton from '@mui/material/IconButton';
+import React, { useState } from 'react';
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
+import { authApi } from '../../lib/api/auth';
+import {
+  Box,
+  Paper,
+  Avatar,
+  Typography,
+  Stack,
+  TextField,
+  InputAdornment,
+  IconButton,
+  Alert,
+  Link,
+  Button,
+  CircularProgress
+} from '@mui/material';
+import {
+  LockOutlined as LockOutlinedIcon,
+  Visibility,
+  VisibilityOff
+} from '@mui/icons-material';
 
 const Login: React.FC = () => {
-  const { signIn } = useContext(AuthContext)!;
   const navigate = useNavigate();
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const location = useLocation();
+  const from = (location.state as any)?.from?.pathname || '/';
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
     try {
-      await signIn(email, password);
-      navigate('/');
+      const { error } = await authApi.signIn(email, password);
+      if (error) throw error;
+      
+      // 成功したらリダイレクト
+      navigate(from, { replace: true });
     } catch (err: any) {
-      const errorMessage = err.code === 'auth/invalid-credential'
-        ? 'メールアドレスまたはパスワードが間違っています。'
-        : 'ログイン中にエラーが発生しました。';
-      setError(errorMessage);
+      // ユーザーフレンドリーなエラーメッセージ
+      if (err.message.includes('Invalid login credentials')) {
+        setError('メールアドレスまたはパスワードが間違っています。');
+      } else {
+        setError(err.message || 'ログインに失敗しました。');
+      }
     } finally {
       setLoading(false);
     }
@@ -66,10 +74,11 @@ const Login: React.FC = () => {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          maxWidth: 400,
+          maxWidth: 450,
           width: '100%',
         }}
       >
+        {/* Signupに合わせて緑色、アイコンは鍵に変更 */}
         <Avatar sx={{ m: 1, bgcolor: '#1976d2' }}>
           <LockOutlinedIcon />
         </Avatar>
@@ -109,13 +118,33 @@ const Login: React.FC = () => {
                 ),
               }}
             />
-            {error && <Alert severity="error">{error}</Alert>}
+            
+            {error && (
+              <Alert
+                severity="error"
+                sx={{
+                  '& .MuiAlert-message': {
+                    fontSize: '0.875rem',
+                    lineHeight: 1.4
+                  }
+                }}
+              >
+                {error}
+              </Alert>
+            )}
+
             <Button
               type="submit"
               fullWidth
               variant="contained"
               disabled={loading}
-              sx={{ mt: 2, mb: 2, position: 'relative' }}
+              sx={{
+                mt: 2,
+                mb: 2,
+                position: 'relative',
+                bgcolor: '#1976d2',
+                '&:hover': { bgcolor: '#1b5e20' }
+              }}
             >
               {loading && (
                 <CircularProgress

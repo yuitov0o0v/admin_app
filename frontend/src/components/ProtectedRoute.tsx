@@ -1,32 +1,54 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { CircularProgress, Box } from '@mui/material';
 
-export const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
+// ローディング用のコンポーネント（適宜デザインに合わせて変更してください）
+const LoadingScreen = () => (
+  <div className="flex items-center justify-center h-screen">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+  </div>
+);
+
+/**
+ * ログイン必須ルート
+ * 未ログインの場合はログイン画面へリダイレクト
+ */
+export const PrivateRoute = () => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
-  // 1. 認証状態を読み込み中の場合
   if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center', // 水平方向中央
-          alignItems: 'center',     // 垂直方向中央
-          height: '100vh',         // 画面全体の高さ
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingScreen />;
   }
 
-  // 2. ユーザーが存在しない場合
   if (!user) {
-    return <Navigate to="/login" replace />;
+    // ログイン後に元のページに戻れるよう state に from を保存
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // 3. ユーザーが存在する場合 (変更なし)
-  return children;
+  return <Outlet />;
+};
+
+/**
+ * Admin専用ルート
+ * ログイン必須 かつ Roleがadminであること
+ */
+export const AdminRoute = () => {
+  const { user, loading, isAdmin } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (!isAdmin) {
+    // ログインしているが権限がない場合
+    // 403 Forbidden ページやホームへ飛ばす
+    return <Navigate to="/unauthorized" replace />;
+  }
+
+  return <Outlet />;
 };

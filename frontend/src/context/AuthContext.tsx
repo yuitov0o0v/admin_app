@@ -1,65 +1,96 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
-import type { ReactNode } from "react";
-import type { Session, User } from "@supabase/supabase-js";
+// src/context/AuthContext.tsx
+import { createContext, useContext, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import type { Session, User } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabaseClient';
+import type { Database } from '../types/supabase';
 
-interface AuthContextType {
+// DBの型定義からRole型を抽出
+type UserRole = Database['public']['Enums']['user_role'];
+
+export type AuthContextType = {
+  session: Session | null;
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<any>;
-  signUp: (email: string, password: string) => Promise<any>;
+  isAdmin: boolean;
+  role: UserRole | null;
   signOut: () => Promise<void>;
-}
+};
 
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// --- named export に変更 ---
+export const AuthContext = createContext<AuthContextType>({
+  session: null,
+  user: null,
+  loading: true,
+  isAdmin: false,
+  role: null,
+  signOut: async () => {},
+});
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState<UserRole | null>(null);
 
   useEffect(() => {
-    // セッションの初期チェック
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    // 初期セッション取得
+    const initSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          extractRole(session.user);
+        }
+      } catch (error) {
+        console.error('Session init error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    // 認証状態の変更を監視
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session: Session | null) => {
-      setUser(session?.user ?? null);
-    });
+    initSession();
 
-    return () => listener.subscription.unsubscribe();
+    // 認証状態の監視
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          extractRole(session.user);
+        } else {
+          setRole(null);
+        }
+
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    return data;
-  };
-
-  const signUp = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
-    return data;
+  const extractRole = (currentUser: User) => {
+    const assignedRole = currentUser.app_metadata?.role as UserRole | undefined;
+    setRole(assignedRole ?? 'user');
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    await supabase.auth.signOut();
+    setRole(null);
+    setUser(null);
+    setSession(null);
   };
 
+  const isAdmin = role === 'admin';
+
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ session, user, loading, isAdmin, role, signOut }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+// --- カスタムフックも named export ---
+export const useAuth = () => useContext(AuthContext);

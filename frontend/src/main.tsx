@@ -1,11 +1,15 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import 'leaflet/dist/leaflet.css'
-import App from './App.tsx'
+// src/main.tsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.tsx';
+import { AuthProvider } from './context/AuthContext'; // インポート追加
+import './index.css';
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    {/* AuthProviderで囲むことで、どこでも user 情報が使えるようになる */}
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  </React.StrictMode>,
+);

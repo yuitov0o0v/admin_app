@@ -1,432 +1,569 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../../lib/supabaseClient'; // Supabaseクライアントのパスは適宜調整してください
-import { useSupabaseStorage } from '../../hooks/useSupabaseStorage'; // 作成したカスタムフックをインポート
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   Container,
+  Grid,
+  Card,
+  CardMedia,
+  CardContent,
+  CardActionArea,
   Typography,
   Box,
-  CircularProgress,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  IconButton,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Button,
   TextField,
-  Snackbar,
+  InputAdornment,
+  Chip,
+  Skeleton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  IconButton,
+  Stack,
   Alert,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  Snackbar,
+  CircularProgress,
+  Divider,
+  // Avatar
 } from '@mui/material';
-import { Edit, Delete, CloudUpload } from '@mui/icons-material';
+import {
+  Search as SearchIcon,
+  FilterList as FilterListIcon,
+  Close as CloseIcon,
+  Place as PlaceIcon,
+  ViewInAr as ViewInArIcon,
+  ImageNotSupported as ImageNotSupportedIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Save as SaveIcon,
+  Cancel as CancelIcon,
+  Radar as RadarIcon,
+  ColorLens as ColorLensIcon
+} from '@mui/icons-material';
 
-// --- 型定義 ---
-interface Spot {
-  id: number;
-  name: string;
-  description: string;
-  subtitle: string | null;
-  address: string | null;
-  latitude: number;
-  longitude: number;
-  image_url: string | null;
-  ar_model_id: number | null;
-  category: string | null;
-  pin_color: string | null;
-  radius: number | null;
-}
+import { useAuth } from '../../context/AuthContext';
+import { spotsApi } from '../../lib/api/spot';
+import { arApi } from '../../lib/api/ar'; // 追加
+import { storageApi } from '../../lib/api/storage'; // 追加
+import type{ Database } from '../../types/supabase';
 
-interface ARModel {
-  id: number;
-  name: string;
-}
+// フォームコンポーネントをインポート
+import SpotRegistrationForm from '../../components/spotRegistrationForm';
+import type { ARModel } from '../../components/spotRegistrationForm';
 
-// --- 定数定義 ---
-const CATEGORIES = ['観光', 'グルメ', 'イベント', 'アート', 'その他'];
-const PIN_COLORS = [
-  { name: '赤', value: '#FF0000' },
-  { name: '青', value: '#0000FF' },
-  { name: '緑', value: '#008000' },
-  { name: '黄', value: '#FFFF00' },
-  { name: '紫', value: '#800080' },
-  { name: '黒', value: '#000000' },
-  { name: '白', value: '#FFFFFF' },
-  { name: '灰', value: '#808080' },
-  { name: '茶', value: '#A52A2A' },
-  { name: 'コーラルピンク', value: '#F8AFA6' },
-  { name: 'マスタードイエロー', value: '#DDA448' },
-  { name: 'セージグリーン', value: '#9DC183' },
-  { name: 'ダスティブルー', value: '#6A89A4' },
-  { name: 'トープ', value: '#483C32' },
-];
+type Spot = Database['public']['Tables']['spots']['Row'];
 
+const CATEGORIES = ['All', '観光', 'グルメ', 'イベント', 'アート', 'その他'];
 
-const SpotListPage: React.FC = () => {
-  // --- State管理 ---
-  const [spots, setSpots] = useState<Spot[]>([]);
-  const [arModels, setArModels] = useState<ARModel[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editingSpot, setEditingSpot] = useState<Spot | null>(null);
-
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' } | null>(null);
-
-  // 画像アップロード関連
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const { uploadFile, isUploading, error: uploadError } = useSupabaseStorage();
+const ListView: React.FC = () => {
+  const { isAdmin } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [spots, setSpots] = useState<Spot[]>([]);
+  const [arModels, setArModels] = useState<ARModel[]>([]); // ARモデル一覧
+  const [loading, setLoading] = useState(true);
+  
+  // フィルター
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
+  // モーダル & 編集用
+  const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // --- 編集フォーム用State (SpotRegistrationFormのPropsに合わせる) ---
+  const [spotName, setSpotName] = useState('');
+  const [subtitle, setSubtitle] = useState('');
+  const [spotDescription, setSpotDescription] = useState('');
+  const [address, setAddress] = useState('');
+  // 画像関連
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  // 詳細設定
+  const [selectedArModelId, setSelectedArModelId] = useState<string | ''>('');
+  const [category, setCategory] = useState<string>('');
+  const [pinColor, setPinColor] = useState<string>('#FF0000');
+  const [radius, setRadius] = useState<number>(50);
+
+  // 通知
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
   // --- データ取得 ---
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    const [spotsResponse, arModelsResponse] = await Promise.all([
-      supabase.from('spots').select('*').order('id', { ascending: true }),
-      supabase.from('ar_models').select('id, name')
-    ]);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        // スポットとARモデルを並列取得
+        const [spotsRes, arRes] = await Promise.all([
+          spotsApi.getAllActive(),
+          arApi.getAll()
+        ]);
 
-    if (spotsResponse.error) {
-      console.error('Error fetching spots:', spotsResponse.error);
-      setSnackbar({ open: true, message: 'スポットデータの取得に失敗しました。', severity: 'error' });
-    } else {
-      setSpots(spotsResponse.data || []);
-    }
+        if (spotsRes.error) throw spotsRes.error;
+        if (arRes.error) throw arRes.error;
 
-    if (arModelsResponse.error) {
-        console.error('Error fetching AR models:', arModelsResponse.error);
-        setSnackbar({ open: true, message: 'ARモデルの取得に失敗しました。', severity: 'error' });
-    } else {
-        setArModels(arModelsResponse.data || []);
-    }
+        setSpots(spotsRes.data || []);
+        
+        // ARモデルの型変換
+        const formattedArModels = (arRes.data || []).map(m => ({
+          id: m.id,
+          model_name: m.model_name,
+          file_url: m.file_url || ''
+        }));
+        setArModels(formattedArModels);
 
-    setLoading(false);
+      } catch (err) {
+        console.error('Failed to fetch data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // --- フィルタリング ---
+  const filteredSpots = useMemo(() => {
+    return spots.filter((spot) => {
+      const matchesSearch = spot.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            (spot.description && spot.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesCategory = selectedCategory === 'All' || spot.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [spots, searchQuery, selectedCategory]);
 
-
-  // --- 編集関連の処理 ---
-  const handleOpenEditDialog = (spot: Spot) => {
-    setEditingSpot({ ...spot });
-    setPreviewUrl(spot.image_url || null);
-    setEditDialogOpen(true);
+  // --- ハンドラ ---
+  const handleOpenDialog = (spot: Spot) => {
+    setSelectedSpot(spot);
+    setIsEditing(false);
   };
 
-  const handleCloseEditDialog = () => {
-    setEditDialogOpen(false);
-    setEditingSpot(null);
+  const handleCloseDialog = () => {
+    if (actionLoading) return;
+    setSelectedSpot(null);
+    setIsEditing(false);
+    resetForm();
+  };
+
+  const resetForm = () => {
+    setSpotName('');
+    setSubtitle('');
+    setSpotDescription('');
+    setAddress('');
     setImageFile(null);
-    setPreviewUrl(null);
+    setImagePreview(null);
+    setSelectedArModelId('');
+    setCategory('');
+    setPinColor('#FF0000');
+    setRadius(50);
   };
 
-  const handleEditFormChange = (field: keyof Spot, value: any) => {
-    setEditingSpot(prev => prev ? { ...prev, [field]: value } : null);
+  // 編集モード開始（現在の値をフォームStateにセット）
+  const handleStartEdit = () => {
+    if (selectedSpot) {
+      setSpotName(selectedSpot.name);
+      setSubtitle(selectedSpot.subtitle || '');
+      setSpotDescription(selectedSpot.description || '');
+      setAddress(selectedSpot.address);
+      setImagePreview(selectedSpot.image_url); // 既存画像を表示
+      setSelectedArModelId(selectedSpot.ar_model_id || '');
+      setCategory(selectedSpot.category || '');
+      setPinColor(selectedSpot.pin_color || '#FF0000');
+      setRadius(selectedSpot.radius || 50);
+      
+      setIsEditing(true);
+    }
   };
 
-  const handleFileSelect = (file: File | null ) => {
-    if(file) {
-      if (!file.type.startsWith('image/')) {
-        setSnackbar({ open: true, message: '画像ファイルを選択してください。', severity: 'error' });
-        return;
-      }
+  // 画像変更ハンドラ
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
       setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPreviewUrl(reader.result as string);
+        setImagePreview(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileSelect(e.target.files?.[0] || null);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault(); // デフォルトの動作を防ぎ、ドロップを可能にする
-  };
-
+  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileSelect(e.dataTransfer.files[0]);
-      e.dataTransfer.clearData();
+      // ファイル入力イベントを手動で発火させるのと同等の処理
+      const file = e.dataTransfer.files[0];
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleUpdateSpot = async () => {
-    if (!editingSpot) return;
-
-    let imageUrlToUpdate = editingSpot.image_url;
-
-    // 新しい画像ファイルがあれば、カスタムフックを使ってアップロード処理を行う
-    if (imageFile) {
-      // 🚀 ここでカスタムフックの関数を呼び出すだけ！
-      const newUrl = await uploadFile('spot_images', imageFile);
-
-      if (newUrl) {
-        imageUrlToUpdate = newUrl;
-      } else {
-        // アップロード失敗時の処理
-        setSnackbar({ open: true, message: `画像アップロードに失敗しました: ${uploadError?.message}`, severity: 'error' });
-        return; // 更新処理を中断
-      }
-    }
-
-    // データベースの情報を更新
+  // 更新保存
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedSpot || !selectedSpot.id) return;
+    
     try {
-        const { id, ...updateData } = editingSpot;
-        const { error: dbError } = await supabase
-            .from('spots')
-            .update({ ...updateData, image_url: imageUrlToUpdate })
-            .eq('id', id);
+      setActionLoading(true);
 
-        if (dbError) throw dbError;
+      let imageUrl = selectedSpot.image_url; // デフォルトは既存URL
 
-        setSnackbar({ open: true, message: '更新が完了しました。', severity: 'success' });
-        handleCloseEditDialog();
-        fetchData();
+      // 新しい画像がある場合のみアップロード
+      if (imageFile) {
+        setIsUploading(true);
+        imageUrl = await storageApi.uploadSpotImage(imageFile);
+        setIsUploading(false);
+      }
+      
+      const updates = {
+        name: spotName,
+        subtitle: subtitle || null,
+        description: spotDescription,
+        // address: address, // 住所は変更しない
+        category: category || null,
+        image_url: imageUrl,
+        ar_model_id: selectedArModelId || null,
+        pin_color: pinColor,
+        radius: radius,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await spotsApi.update(selectedSpot.id, updates);
+      if (error) throw error;
+
+      // ローカルState更新
+      const updatedSpot = { ...selectedSpot, ...updates };
+      setSpots(prev => prev.map(s => s.id === selectedSpot.id ? updatedSpot : s));
+      setSelectedSpot(updatedSpot);
+      
+      setIsEditing(false);
+      setSnackbar({ open: true, message: 'スポット情報を更新しました', severity: 'success' });
 
     } catch (error: any) {
-        setSnackbar({ open: true, message: `更新に失敗しました: ${error.message}`, severity: 'error' });
+      console.error('Update failed:', error);
+      setSnackbar({ open: true, message: `更新失敗: ${error.message}`, severity: 'error' });
+    } finally {
+      setActionLoading(false);
+      setIsUploading(false);
     }
   };
 
+  // 削除
+  const handleDelete = async () => {
+    if (!selectedSpot || !window.confirm(`「${selectedSpot.name}」を削除してもよろしいですか？`)) return;
 
-  // --- 削除関連の処理 ---
-  const handleOpenDeleteDialog = (id: number) => {
-    setDeletingId(id);
-    setDeleteDialogOpen(true);
-  };
+    try {
+      setActionLoading(true);
+      const { error } = await spotsApi.softDelete(selectedSpot.id);
+      if (error) throw error;
 
-  const handleCloseDeleteDialog = () => {
-    setDeleteDialogOpen(false);
-    setDeletingId(null);
-  };
+      setSpots(prev => prev.filter(s => s.id !== selectedSpot.id));
+      handleCloseDialog();
+      setSnackbar({ open: true, message: 'スポットを削除しました', severity: 'success' });
 
-  const handleDeleteSpot = async () => {
-    if (!deletingId) return;
-    const { error } = await supabase.from('spots').delete().eq('id', deletingId);
-
-    if (error) {
-      setSnackbar({ open: true, message: `削除に失敗しました: ${error.message}`, severity: 'error' });
-    } else {
-      setSnackbar({ open: true, message: '削除が完了しました。', severity: 'success' });
-      handleCloseDeleteDialog();
-      fetchData();
+    } catch (error: any) {
+      setSnackbar({ open: true, message: `削除失敗: ${error.message}`, severity: 'error' });
+    } finally {
+      setActionLoading(false);
     }
   };
 
-
-  // --- レンダリング ---
-  if (loading) {
-    return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>;
-  }
+  // 選択中のARモデル名を取得（詳細表示用）
+  const getARModelName = (id: string | null) => {
+    if (!id) return null;
+    return arModels.find(m => m.id === id)?.model_name || '不明なモデル';
+  };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" gutterBottom>スポット一覧・編集</Typography>
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      {/* --- ヘッダー & フィルター --- */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
+          スポット一覧
+        </Typography>
+        <Grid container spacing={2} alignItems="center">
+          <Grid size={{ xs: 12, md: 6 }}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="スポット名やキーワードで検索..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><SearchIcon color="action" /></InputAdornment>,
+              }}
+              size="small"
+              sx={{ bgcolor: 'background.paper' }}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: 0.5 }}>
+              <FilterListIcon sx={{ color: 'action.active', mr: 1, alignSelf: 'center' }} />
+              {CATEGORIES.map((cat) => (
+                <Chip
+                  key={cat}
+                  label={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  color={selectedCategory === cat ? 'primary' : 'default'}
+                  variant={selectedCategory === cat ? 'filled' : 'outlined'}
+                  clickable
+                />
+              ))}
+            </Stack>
+          </Grid>
+        </Grid>
+      </Box>
 
-      <TableContainer component={Paper}>
-        <Table sx={{ minWidth: 650 }}>
-          <TableHead>
-            <TableRow>
-              <TableCell>ID</TableCell>
-              <TableCell>スポット名</TableCell>
-              <TableCell>カテゴリ</TableCell>
-              <TableCell>住所</TableCell>
-              <TableCell>イメージ画像</TableCell>
-              <TableCell align="right">操作</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {spots.map((spot) => (
-              <TableRow key={spot.id}>
-                <TableCell>{spot.id}</TableCell>
-                <TableCell>{spot.name}</TableCell>
-                <TableCell>{spot.category || '未設定'}</TableCell>
-                <TableCell>{spot.address || '未設定'}</TableCell>
-                <TableCell>
-                  {spot.image_url ? <img src={spot.image_url} alt={spot.name} style={{ width: 100, height: 'auto' }} /> : '未設定'}
-                </TableCell>
-                <TableCell align="right">
-                  <IconButton onClick={() => handleOpenEditDialog(spot)}><Edit /></IconButton>
-                  <IconButton onClick={() => handleOpenDeleteDialog(spot.id)}><Delete /></IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* 編集用ダイアログ */}
-      <Dialog open={editDialogOpen} onClose={handleCloseEditDialog} maxWidth="md" fullWidth>
-        <DialogTitle>スポットの編集 (ID: {editingSpot?.id})</DialogTitle>
-        <DialogContent>
-          <Box
-            component="form"
-            sx={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 2,
-              mt: 1,
-            }}
-          >
-            {/* === ここからが修正・追加箇所 === */}
-            <Box sx={{ width: '100%' }}>
-              <Typography variant="subtitle1" gutterBottom>イメージ画像</Typography>
-              <input
-                  type="file"
-                  accept="image/*"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  style={{ display: 'none' }}
-              />
-              <Box
-                  sx={{
-                      border: '2px dashed grey',
-                      borderRadius: 2,
-                      p: 2,
-                      textAlign: 'center',
-                      cursor: 'pointer',
-                      '&:hover': {
-                          borderColor: 'primary.main',
-                          backgroundColor: 'action.hover'
-                      },
-                      minHeight: 150,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column',
-                      position: 'relative',
-                  }}
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-              >
-                  {isUploading ? (
-                      <CircularProgress />
-                  ) : previewUrl ? (
-                      <img src={previewUrl} alt="プレビュー" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain' }} />
+      {/* --- リスト表示 --- */}
+      <Grid container spacing={3}>
+        {loading ? (
+          Array.from(new Array(6)).map((_, index) => (
+            <Grid key={index} size={{ xs: 12, sm: 6, md: 4 }}>
+              <Card>
+                <Skeleton variant="rectangular" height={180} />
+                <CardContent>
+                  <Skeleton variant="text" height={30} width="80%" />
+                  <Skeleton variant="text" height={20} width="60%" />
+                </CardContent>
+              </Card>
+            </Grid>
+          ))
+        ) : filteredSpots.length > 0 ? (
+          filteredSpots.map((spot) => (
+            <Grid key={spot.id} size={{ xs: 12, sm: 6, md: 4 }}>
+              <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 4 } }}>
+                <CardActionArea onClick={() => handleOpenDialog(spot)} sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  {spot.image_url ? (
+                    <CardMedia component="img" height="180" image={spot.image_url} alt={spot.name} sx={{ objectFit: 'cover' }} />
                   ) : (
-                      <Box>
-                          <CloudUpload sx={{ fontSize: 40, mb: 1 }} />
-                          <Typography>クリック または ドラッグ&ドロップして画像をアップロード</Typography>
-                      </Box>
-                  )}
-              </Box>
-            </Box>
-             {/* === ここまでが修正・追加箇所 === */}
-
-            <Box sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
-              <TextField label="スポット名" fullWidth value={editingSpot?.name || ''} onChange={(e) => handleEditFormChange('name', e.target.value)} />
-            </Box>
-            <Box sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
-              <TextField label="サブタイトル" fullWidth value={editingSpot?.subtitle || ''} onChange={(e) => handleEditFormChange('subtitle', e.target.value)} />
-            </Box>
-            <Box sx={{ width: '100%' }}>
-              <TextField label="住所" fullWidth value={editingSpot?.address || ''} onChange={(e) => handleEditFormChange('address', e.target.value)} />
-            </Box>
-            <Box sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
-                <TextField label="緯度 (Latitude)" type="number" fullWidth value={editingSpot?.latitude || ''} onChange={(e) => handleEditFormChange('latitude', parseFloat(e.target.value))} />
-            </Box>
-            <Box sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
-                <TextField label="経度 (Longitude)" type="number" fullWidth value={editingSpot?.longitude || ''} onChange={(e) => handleEditFormChange('longitude', parseFloat(e.target.value))} />
-            </Box>
-            <Box sx={{ width: '100%' }}>
-              <TextField label="説明" fullWidth multiline rows={4} value={editingSpot?.description || ''} onChange={(e) => handleEditFormChange('description', e.target.value)} />
-            </Box>
-            <Box sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
-              <FormControl fullWidth>
-                <InputLabel>カテゴリー</InputLabel>
-                <Select value={editingSpot?.category || ''} label="カテゴリー" onChange={(e) => handleEditFormChange('category', e.target.value)}>
-                  {CATEGORIES.map(cat => <MenuItem key={cat} value={cat}>{cat}</MenuItem>)}
-                </Select>
-              </FormControl>
-            </Box>
-             <Box sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
-              <FormControl fullWidth>
-                <InputLabel>ピンの色</InputLabel>
-                <Select value={editingSpot?.pin_color || ''} label="ピンの色" onChange={(e) => handleEditFormChange('pin_color', e.target.value)}>
-                  {PIN_COLORS.map(color => <MenuItem key={color.value} value={color.value}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ width: 16, height: 16, backgroundColor: color.value, borderRadius: '50%', border: '1px solid #ccc' }} />
-                      {color.name}
+                    <Box sx={{ height: 180, width: '100%', bgcolor: 'grey.200', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                      <ImageNotSupportedIcon sx={{ fontSize: 40, color: 'grey.400' }} />
+                      <Typography variant="caption" color="text.secondary">NO IMAGE</Typography>
                     </Box>
-                  </MenuItem>)}
-                </Select>
-              </FormControl>
+                  )}
+                  <CardContent sx={{ width: '100%' }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                        <Typography gutterBottom variant="h6" component="div" sx={{ lineHeight: 1.2 }}>
+                        {spot.name}
+                        </Typography>
+                        {spot.ar_model_id && (
+                             <Chip icon={<ViewInArIcon sx={{ fontSize: 16 }} />} label="AR" size="small" color="secondary" variant="outlined" sx={{ height: 20, '& .MuiChip-label': { px: 1, fontSize: '0.65rem' } }} />
+                        )}
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary" sx={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      mt: 1
+                    }}>
+                      {spot.description}
+                    </Typography>
+                    <Chip label={spot.category || 'その他'} size="small" sx={{ mt: 1, bgcolor: '#f0f0f0' }} />
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Grid>
+          ))
+        ) : (
+          <Grid size={{ xs: 12 }}>
+            <Box sx={{ textAlign: 'center', py: 5 }}>
+              <Typography variant="h6" color="text.secondary">
+                条件に一致するスポットが見つかりませんでした。
+              </Typography>
             </Box>
-            <Box sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
-              <FormControl fullWidth>
-                <InputLabel>ARモデル</InputLabel>
-                <Select
-                  value={editingSpot?.ar_model_id?.toString() || ''}
-                  label="ARモデル"
-                  onChange={(e) => handleEditFormChange('ar_model_id', e.target.value === '' ? null : Number(e.target.value))}
-                >
-                   <MenuItem value=""><em>選択しない</em></MenuItem>
-                  {arModels.map(model => <MenuItem key={model.id} value={model.id.toString()}>{model.name}</MenuItem>)}
-                </Select>
-              </FormControl>
-            </Box>
-            <Box sx={{ width: { xs: '100%', sm: 'calc(50% - 8px)' } }}>
-              <TextField label="判定範囲 (m)" type="number" fullWidth value={editingSpot?.radius || ''} onChange={(e) => handleEditFormChange('radius', Number(e.target.value))} />
-            </Box>
-            <Box sx={{ width: '100%' }}>
-              <TextField
-                label="イメージ画像URL"
-                fullWidth value={editingSpot?.image_url || ''}
-                onChange={(e) => handleEditFormChange('image_url', e.target.value)}
-                helperText="画像をアップロードするとこのURLは自動で更新されます。"
-                disabled={isUploading || imageFile !== null}
-              />
-            </Box>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseEditDialog} disabled={isUploading}>キャンセル</Button>
-          <Button onClick={handleUpdateSpot} variant="contained" disabled={isUploading}>
-            {isUploading ? <CircularProgress size={24} /> : '更新する'}
-          </Button>
-        </DialogActions>
+          </Grid>
+        )}
+      </Grid>
+
+      {/* --- 詳細・編集ダイアログ --- */}
+      <Dialog
+        open={!!selectedSpot}
+        onClose={handleCloseDialog}
+        maxWidth="sm"
+        fullWidth
+        scroll="paper"
+      >
+        {selectedSpot && (
+          <>
+            <DialogTitle sx={{ m: 0, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
+                {isEditing ? 'スポット編集' : selectedSpot.name}
+              </Typography>
+              {!isEditing && (
+                <IconButton aria-label="close" onClick={handleCloseDialog}>
+                  <CloseIcon />
+                </IconButton>
+              )}
+            </DialogTitle>
+            
+            <DialogContent dividers>
+              {!isEditing ? (
+                /* --- 閲覧モード (詳細表示) --- */
+                <Stack spacing={2}>
+                  {selectedSpot.image_url && (
+                    <Box component="img" src={selectedSpot.image_url} alt={selectedSpot.name} sx={{ width: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: 1, bgcolor: 'black' }} />
+                  )}
+                  
+                  {/* カテゴリ・AR有無 */}
+                  <Box>
+                      <Chip label={selectedSpot.category || 'カテゴリ未設定'} color="primary" variant="outlined" size="small" sx={{ mr: 1 }} />
+                  </Box>
+
+                  {/* サブタイトル */}
+                  {selectedSpot.subtitle && (
+                    <Typography variant="subtitle1" color="primary.main" fontWeight="bold">{selectedSpot.subtitle}</Typography>
+                  )}
+
+                  {/* 説明 */}
+                  <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>{selectedSpot.description}</Typography>
+                  
+                  <Divider />
+                  
+                  {/* 詳細情報グリッド (AR, ピン色, 範囲) */}
+                  <Typography variant="subtitle2" color="text.secondary">設定情報</Typography>
+                  <Grid container spacing={2}>
+                  <Grid size={{ xs: 6 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <ViewInArIcon color="action" />
+                            <Typography variant="body2">
+                                {getARModelName(selectedSpot.ar_model_id) || 'ARなし'}
+                            </Typography>
+                        </Box>
+                    </Grid>
+                    <Grid size={{ xs: 6 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <ColorLensIcon style={{ color: selectedSpot.pin_color || 'grey' }} />
+                            <Typography variant="body2">
+                                ピン色
+                            </Typography>
+                        </Box>
+                    </Grid>
+                      <Grid size={{ xs: 12 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <RadarIcon color="action" />
+                            <Typography variant="body2">
+                                チェックイン範囲: <strong>{selectedSpot.radius || 50}m</strong>
+                            </Typography>
+                        </Box>
+                    </Grid>
+                  </Grid>
+                  
+                  <Divider />
+
+                  {/* 住所 */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', bgcolor: 'grey.100', p: 1.5, borderRadius: 1 }}>
+                    <PlaceIcon fontSize="small" />
+                    <Typography variant="body2">{selectedSpot.address}</Typography>
+                  </Box>
+                </Stack>
+              ) : (
+                /* --- 編集モード (SpotRegistrationForm 再利用) --- */
+                <SpotRegistrationForm
+                  isEditMode={true}
+                  disableAddress={true} // 住所変更不可
+                  
+                  spotName={spotName} setSpotName={setSpotName}
+                  subtitle={subtitle} setSubtitle={setSubtitle}
+                  spotDescription={spotDescription} setSpotDescription={setSpotDescription}
+                  address={address} setAddress={setAddress}
+                  
+                  imagePreview={imagePreview}
+                  
+                  selectedArModelId={selectedArModelId} setSelectedArModelId={setSelectedArModelId}
+                  category={category} setCategory={setCategory}
+                  pinColor={pinColor} setPinColor={setPinColor}
+                  radius={radius} setRadius={setRadius}
+                  
+                  newPin={{ lat: selectedSpot.latitude, lng: selectedSpot.longitude }} // ダミー座標（フォーム有効化のため）
+                  addressLoading={false}
+                  submitting={actionLoading}
+                  arModels={arModels}
+                  isUploading={isUploading}
+                  
+                  handleSubmit={handleSave}
+                  handleImageChange={handleImageChange}
+                  fileInputRef={fileInputRef}
+                  handleDragOver={handleDragOver}
+                  handleDrop={handleDrop}
+                />
+              )}
+            </DialogContent>
+            
+            <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
+              {isEditing ? (
+                // 編集中のボタン
+                <>
+                  <Button 
+                    startIcon={<CancelIcon />} 
+                    onClick={() => { setIsEditing(false); resetForm(); }} 
+                    color="inherit"
+                    disabled={actionLoading}
+                  >
+                    キャンセル
+                  </Button>
+                  <Button 
+                    startIcon={actionLoading ? <CircularProgress size={20} /> : <SaveIcon />} 
+                    onClick={handleSave} 
+                    variant="contained" 
+                    color="primary"
+                    disabled={actionLoading}
+                  >
+                    保存
+                  </Button>
+                </>
+              ) : (
+                // 閲覧中のボタン
+                <>
+                  <Box>
+                    {isAdmin && (
+                      <Button 
+                        startIcon={<DeleteIcon />} 
+                        onClick={handleDelete} 
+                        color="error"
+                        sx={{ mr: 1 }}
+                      >
+                        削除
+                      </Button>
+                    )}
+                  </Box>
+                  <Box>
+                    {isAdmin && (
+                      <Button 
+                        startIcon={<EditIcon />} 
+                        onClick={handleStartEdit} 
+                        sx={{ mr: 1 }}
+                      >
+                        編集
+                      </Button>
+                    )}
+                    <Button onClick={handleCloseDialog} variant="outlined">
+                      閉じる
+                    </Button>
+                  </Box>
+                </>
+              )}
+            </DialogActions>
+          </>
+        )}
       </Dialog>
-
-
-      {/* 削除確認ダイアログ */}
-      <Dialog open={deleteDialogOpen} onClose={handleCloseDeleteDialog}>
-        <DialogTitle>削除の確認</DialogTitle>
-        <DialogContent><DialogContentText>本当にこのスポットを削除しますか？この操作は元に戻せません。</DialogContentText></DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDeleteDialog}>キャンセル</Button>
-          <Button onClick={handleDeleteSpot} color="error">削除する</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* 通知用Snackbar */}
-      <Snackbar open={snackbar?.open} autoHideDuration={6000} onClose={() => setSnackbar(null)} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
-        <Alert onClose={() => setSnackbar(null)} severity={snackbar?.severity} sx={{ width: '100%' }}>{snackbar?.message}</Alert>
+      
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
+          {snackbar.message}
+        </Alert>
       </Snackbar>
-
     </Container>
   );
 };
 
-export default SpotListPage;
+export default ListView;

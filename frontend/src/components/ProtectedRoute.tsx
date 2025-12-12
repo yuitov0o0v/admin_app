@@ -47,7 +47,7 @@ export const AdminRoute = () => {
   if (!isAdmin) {
     // ログインしているが権限がない場合
     // 403 Forbidden ページやホームへ飛ばす
-    return <Navigate to="/" replace />;
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return <Outlet />;

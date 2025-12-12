@@ -1,25 +1,35 @@
-// src/pages/Login.tsx
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { authApi } from '../../lib/api/auth';
 import {
-  Container,
   Box,
-  Typography,
-  TextField,
-  Button,
-  Alert,
   Paper,
-  Link
+  Avatar,
+  Typography,
+  Stack,
+  TextField,
+  InputAdornment,
+  IconButton,
+  Alert,
+  Link,
+  Button,
+  CircularProgress
 } from '@mui/material';
+import {
+  LockOutlined as LockOutlinedIcon,
+  Visibility,
+  VisibilityOff
+} from '@mui/icons-material';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as any)?.from?.pathname || '/'; // ログイン後のリダイレクト先
+  const from = (location.state as any)?.from?.pathname || '/';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -31,75 +41,137 @@ const Login: React.FC = () => {
     try {
       const { error } = await authApi.signIn(email, password);
       if (error) throw error;
-      // AuthContextが自動でsession変更を検知するので、単に遷移するだけでOK
+      
+      // 成功したらリダイレクト
       navigate(from, { replace: true });
     } catch (err: any) {
-      setError(err.message || 'Failed to login');
+      // ユーザーフレンドリーなエラーメッセージ
+      if (err.message.includes('Invalid login credentials')) {
+        setError('メールアドレスまたはパスワードが間違っています。');
+      } else {
+        setError(err.message || 'ログインに失敗しました。');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container component="main" maxWidth="xs">
-      <Box
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: '#f5f5f5',
+      }}
+    >
+      <Paper
+        elevation={6}
         sx={{
-          marginTop: 8,
+          padding: 4,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          maxWidth: 450,
+          width: '100%',
         }}
       >
-        <Paper elevation={3} sx={{ p: 4, width: '100%', borderRadius: 2 }}>
-          <Typography component="h1" variant="h5" align="center" gutterBottom>
-            Sign in
-          </Typography>
-          
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-          <Box component="form" onSubmit={handleSubmit} noValidate>
+        {/* Signupに合わせて緑色、アイコンは鍵に変更 */}
+        <Avatar sx={{ m: 1, bgcolor: '#1976d2' }}>
+          <LockOutlinedIcon />
+        </Avatar>
+        <Typography component="h1" variant="h5">
+          ログイン
+        </Typography>
+        <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
+          <Stack spacing={2}>
             <TextField
-              margin="normal"
-              required
-              fullWidth
-              id="email"
-              label="Email Address"
-              name="email"
-              autoComplete="email"
-              autoFocus
+              label="メールアドレス"
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-            />
-            <TextField
-              margin="normal"
               required
               fullWidth
-              name="password"
-              label="Password"
-              type="password"
-              id="password"
-              autoComplete="current-password"
+              autoFocus
+            />
+            <TextField
+              label="パスワード"
+              type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
+              fullWidth
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
+            
+            {error && (
+              <Alert
+                severity="error"
+                sx={{
+                  '& .MuiAlert-message': {
+                    fontSize: '0.875rem',
+                    lineHeight: 1.4
+                  }
+                }}
+              >
+                {error}
+              </Alert>
+            )}
+
             <Button
               type="submit"
               fullWidth
               variant="contained"
-              sx={{ mt: 3, mb: 2 }}
               disabled={loading}
+              sx={{
+                mt: 2,
+                mb: 2,
+                position: 'relative',
+                bgcolor: '#1976d2',
+                '&:hover': { bgcolor: '#1b5e20' }
+              }}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading && (
+                <CircularProgress
+                  size={24}
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    marginTop: '-12px',
+                    marginLeft: '-12px',
+                  }}
+                />
+              )}
+              ログイン
             </Button>
-            <Box textAlign="center">
-              <Link component={RouterLink} to="/signup" variant="body2">
-                {"Don't have an account? Sign Up"}
-              </Link>
+            <Box sx={{ textAlign: 'center', mt: 2 }}>
+              <Typography variant="body2">
+                アカウントをお持ちでない方は{' '}
+                <Link component={RouterLink} to="/signup" variant="body2">
+                  こちら
+                </Link>
+              </Typography>
             </Box>
-          </Box>
-        </Paper>
-      </Box>
-    </Container>
+          </Stack>
+        </Box>
+      </Paper>
+    </Box>
   );
 };
 

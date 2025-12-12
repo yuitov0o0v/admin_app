@@ -1,85 +1,93 @@
-import React, { useState, useContext } from 'react';
-import type { FormEvent } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { AuthContext } from '../../context/AuthContext';
-
-// Material-UI Components
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import TextField from '@mui/material/TextField';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import Link from '@mui/material/Link';
-import Avatar from '@mui/material/Avatar';
-
-// Material-UI Icons
-import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import Visibility from '@mui/icons-material/Visibility';
-import VisibilityOff from '@mui/icons-material/VisibilityOff';
-import InputAdornment from '@mui/material/InputAdornment';
-import IconButton from '@mui/material/IconButton';
+import React, { useState, useEffect } from 'react'; // useEffect追加
+import { Link as RouterLink, useLocation } from 'react-router-dom'; // useLocation追加
+import { authApi } from '../../lib/api/auth';
+import { adminApi } from '../../lib/api/admin'; // 追加
+import {
+  Box,
+  Paper,
+  Avatar,
+  Typography,
+  Stack,
+  TextField,
+  InputAdornment,
+  IconButton,
+  Alert,
+  Link,
+  Button,
+  CircularProgress
+} from '@mui/material';
+import {
+  PersonAdd as PersonAddIcon,
+  Visibility,
+  VisibilityOff
+} from '@mui/icons-material';
 
 const Signup: React.FC = () => {
-  const { signUp } = useContext(AuthContext)!;
-  const navigate = useNavigate();
+  // URLパラメータからメールアドレスを取得
+  const location = useLocation();
+  const getInitialEmail = () => {
+    const searchParams = new URLSearchParams(location.search);
+    return searchParams.get('email') || '';
+  };
 
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [confirmPassword, setConfirmPassword] = useState<string>('');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
+  const [email, setEmail] = useState(getInitialEmail());
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  // URLパラメータが変わった場合も反映（念のため）
+  useEffect(() => {
+    const emailFromUrl = getInitialEmail();
+    if (emailFromUrl) {
+      setEmail(emailFromUrl);
+    }
+  }, [location.search]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
-    setLoading(true);
 
-    // パスワード確認
-    if (password !== confirmPassword) {
-      setError('パスワードが一致しません。');
-      setLoading(false);
-      return;
-    }
-
-    // パスワード強度チェック
+    // 1. 入力バリデーション
     if (password.length < 8) {
       setError('パスワードは8文字以上で入力してください。');
-      setLoading(false);
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('パスワードが一致しません。');
       return;
     }
 
+    setLoading(true);
+
     try {
-      const result = await signUp(email, password);
+      // 2. 招待の有効性チェック (ここが追加機能)
+      const checkRes = await adminApi.checkInvitation(email);
+      
+      // checkRes.data は { valid: boolean, message: string, ... } の形
+      // 型定義によっては data が any になることがあるためキャストするか確認が必要
+      const inviteData = checkRes.data as any; 
 
-      // Supabaseは既存メールでも成功レスポンスを返すため、
-      // 単純に確認メールの案内を表示
-      if (result.user) {
-        setSuccess('確認メールを送信しました。メールボックスをご確認ください。既にアカウントをお持ちの場合は、ログインページからサインインしてください。');
-      } else {
-        setSuccess('確認メールを送信しました。メールボックスをご確認ください。');
+      if (!inviteData || !inviteData.valid) {
+        throw new Error('このメールアドレスは招待されていません。管理者から招待を受けてください。');
       }
+
+      // 3. アカウント作成 (招待OKなら実行)
+      const { error: signUpError } = await authApi.signUp(email, password);
+      
+      if (signUpError) {
+        throw signUpError;
+      }
+
+      setSuccess('アカウント登録が完了しました。確認メールを送信しましたので、メール内のリンクをクリックして登録を完了させてください。');
     } catch (err: any) {
-      // 実際のエラー（パスワード要件、ネットワークエラーなど）のみ処理
-      let errorMessage = 'アカウント作成中にエラーが発生しました。';
-
-      if (err.message?.includes('Password should be at least')) {
-        errorMessage = 'パスワードは8文字以上で設定してください。';
-      } else if (err.message?.includes('Invalid email')) {
-        errorMessage = '無効なメールアドレス形式です。正しいメールアドレスを入力してください。';
-      } else if (err.message?.includes('password')) {
-        errorMessage = 'パスワードの要件を満たしていません。';
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-
-      setError(errorMessage);
+      setError(err.message || 'アカウント作成に失敗しました。');
     } finally {
       setLoading(false);
     }
@@ -113,6 +121,12 @@ const Signup: React.FC = () => {
         <Typography component="h1" variant="h5">
           アカウント作成
         </Typography>
+        
+        {/* 招待制であることを明示 */}
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
+          ※登録には管理者からの招待が必要です
+        </Typography>
+
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1, width: '100%' }}>
           <Stack spacing={2}>
             <TextField
@@ -123,6 +137,8 @@ const Signup: React.FC = () => {
               required
               fullWidth
               autoFocus
+              // URLから来た場合は分かりやすくするためにReadonlyにしても良いが、
+              // 間違っていた場合に修正できるよう今回は通常入力のままにします
             />
             <TextField
               label="パスワード"

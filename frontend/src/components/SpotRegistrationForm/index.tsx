@@ -15,13 +15,13 @@ import {
 import { CloudUpload } from '@mui/icons-material';
 
 // --- 型定義 ---
-interface ARModel {
+export interface ARModel {
   id: string;
   model_name: string;
   file_url: string;
 }
 
-interface NewPin {
+export interface NewPin {
   lat: number;
   lng: number;
 }
@@ -44,14 +44,17 @@ const PIN_COLORS = [
   { name: 'トープ', value: '#483C32' },
 ];
 
-// --- Propsの型定義 ---
 interface SpotRegistrationFormProps {
+  // --- モード制御用 (追加) ---
+  isEditMode?: boolean;      // 編集モードならTrue
+  disableAddress?: boolean;  // 住所を編集不可にするならTrue
+
   // 状態 (値)
   spotName: string;
   subtitle: string;
   spotDescription: string;
   address: string;
-  imagePreview: string | null; // 表示用URL
+  imagePreview: string | null;
   selectedArModelId: string | '';
   category: string;
   pinColor: string;
@@ -83,6 +86,8 @@ interface SpotRegistrationFormProps {
 }
 
 const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
+  isEditMode = false,
+  disableAddress = false,
   spotName, setSpotName,
   subtitle, setSubtitle,
   spotDescription, setSpotDescription,
@@ -103,30 +108,35 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
   handleDrop,
   fileInputRef,
 }) => {
-  // フォームが無効かどうかを判定
+  // フォーム操作のロック判定
   const isFormDisabled = !newPin || submitting;
 
   return (
     <Box
       sx={{
         width: '100%',
-        p: 3,
+        p: isEditMode ? 0 : 3, // モーダル内ならpadding不要
         display: 'flex',
         flexDirection: 'column',
         gap: 2.5,
         overflowY: 'auto',
-        maxHeight: '100vh',
+        // モーダル内ではスクロール制御を親に任せるため maxHeight を調整
+        maxHeight: isEditMode ? 'none' : '100vh', 
       }}
       component="form"
       onSubmit={handleSubmit}
     >
-      <Typography variant="h6">Spot登録</Typography>
+      {!isEditMode && <Typography variant="h6" fontWeight="bold">スポット登録</Typography>}
+      
+      {/* 案内文 */}
       <Typography variant="body2" color="textSecondary">
         {submitting 
-          ? '登録処理中です。しばらくお待ちください...'
+          ? '処理中です...'
+          : isEditMode
+          ? 'スポットの情報を編集します。'
           : newPin
-          ? '地図上のピンをドラッグして位置を調整できます。'
-          : '地図をクリックしてスポットの位置を指定してください。'}
+          ? 'ピンをドラッグして位置を微調整できます。'
+          : '地図をクリックして登録したい場所を選択してください。'}
       </Typography>
 
       {/* --- 基本情報 --- */}
@@ -163,15 +173,17 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
         size="small"
         value={address}
         onChange={(e) => setAddress(e.target.value)}
-        disabled={isFormDisabled}
+        // 住所は disableAddress が true なら常に無効化
+        disabled={isFormDisabled || disableAddress}
         InputProps={{
           endAdornment: addressLoading && <CircularProgress size={20} />
         }}
+        helperText={disableAddress ? "住所は変更できません（座標との不整合を防ぐため）" : ""}
       />
 
-      {/* --- 画像アップロードエリア --- */}
+      {/* --- 画像アップロード --- */}
       <Box sx={{ width: '100%' }}>
-        <Typography variant="subtitle1" gutterBottom>イメージ画像</Typography>
+        <Typography variant="subtitle2" gutterBottom>画像</Typography>
         <input
             type="file"
             accept="image/*"
@@ -181,15 +193,16 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
         />
         <Box
             sx={{
-                border: '2px dashed grey',
+                border: '2px dashed',
+                borderColor: isFormDisabled ? 'action.disabled' : 'grey.400',
                 borderRadius: 2,
                 p: 2,
                 textAlign: 'center',
                 cursor: isFormDisabled ? 'not-allowed' : 'pointer',
-                backgroundColor: isFormDisabled ? 'action.disabledBackground' : 'transparent',
+                bgcolor: isFormDisabled ? 'action.hover' : 'background.paper',
                 '&:hover': {
-                    borderColor: isFormDisabled ? 'grey' : 'primary.main',
-                    backgroundColor: isFormDisabled ? 'action.disabledBackground' : 'action.hover'
+                    borderColor: isFormDisabled ? 'action.disabled' : 'primary.main',
+                    bgcolor: isFormDisabled ? 'action.hover' : 'action.selected'
                 },
                 minHeight: 150,
                 display: 'flex',
@@ -209,7 +222,7 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
             ) : (
                 <Box>
                     <CloudUpload sx={{ fontSize: 40, mb: 1, color: 'text.secondary' }} />
-                    <Typography color="text.secondary">クリック または ドラッグ&ドロップして画像をアップロード</Typography>
+                    <Typography variant="body2" color="textSecondary">クリック または D&D</Typography>
                 </Box>
             )}
         </Box>
@@ -221,13 +234,13 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
         <Select 
           value={selectedArModelId} 
           label="ARモデル" 
-          onChange={(e) => setSelectedArModelId(e.target.value as string | '')}
+          onChange={(e) => setSelectedArModelId(e.target.value as string)}
         >
-          <MenuItem value=""><em>選択しない</em></MenuItem>
+          <MenuItem value=""><em>なし</em></MenuItem>
           {arModels.map((model) => (
             <MenuItem key={model.id} value={model.id}>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Avatar src={model.file_url} sx={{ width: 24, height: 24, mr: 1 }} variant="square" />
+                {model.file_url && <Avatar src={model.file_url} sx={{ width: 24, height: 24, mr: 1 }} variant="square" />}
                 {model.model_name}
               </Box>
             </MenuItem>
@@ -249,13 +262,7 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
           {PIN_COLORS.map((color) => (
             <MenuItem key={color.value} value={color.value}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{ 
-                  width: 16, 
-                  height: 16, 
-                  backgroundColor: color.value, 
-                  borderRadius: '50%', 
-                  border: '1px solid #ccc' 
-                }} />
+                <Box sx={{ width: 16, height: 16, bgcolor: color.value, borderRadius: '50%', border: '1px solid #ccc' }} />
                 {color.name}
               </Box>
             </MenuItem>
@@ -264,7 +271,7 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
       </FormControl>
 
       <Box>
-        <Typography gutterBottom>判定範囲: {radius}m</Typography>
+        <Typography variant="body2" gutterBottom>チェックイン判定範囲: {radius}m</Typography>
         <Slider
           value={radius}
           onChange={(_, newValue) => setRadius(newValue as number)}
@@ -276,17 +283,18 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
         />
       </Box>
 
-      {/* --- 登録ボタン --- */}
-      <Button type="submit" variant="contained" disabled={isFormDisabled}>
-        {submitting ? (
-          <>
-            <CircularProgress size={20} sx={{ mr: 1 }} />
-            登録中...
-          </>
-        ) : (
-          '登録する'
-        )}
-      </Button>
+      {/* --- ボタン (編集モードでは親側で制御するため非表示にすることも可能だが、今回は親のDialogActionsを使うため非表示にする) --- */}
+      {!isEditMode && (
+        <Button 
+          type="submit" 
+          variant="contained" 
+          size="large"
+          disabled={isFormDisabled}
+          sx={{ mt: 1 }}
+        >
+          {submitting ? '登録中...' : 'スポットを登録'}
+        </Button>
+      )}
     </Box>
   );
 };

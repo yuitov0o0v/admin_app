@@ -1,13 +1,14 @@
+// src/context/AuthContext.tsx
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import type{ Session, User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
-import type{ Database } from '../types/supabase';
+import type { Database } from '../types/supabase';
 
 // DBの型定義からRole型を抽出
 type UserRole = Database['public']['Enums']['user_role'];
 
-type AuthContextType = {
+export type AuthContextType = {
   session: Session | null;
   user: User | null;
   loading: boolean;
@@ -16,7 +17,8 @@ type AuthContextType = {
   signOut: () => Promise<void>;
 };
 
-const AuthContext = createContext<AuthContextType>({
+// --- named export に変更 ---
+export const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
   loading: true,
@@ -32,7 +34,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<UserRole | null>(null);
 
   useEffect(() => {
-    // 1. 初期セッション取得
+    // 初期セッション取得
     const initSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -50,18 +52,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     initSession();
 
-    // 2. 認証状態の監視
+    // 認証状態の監視
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
           extractRole(session.user);
         } else {
           setRole(null);
         }
-        
+
         setLoading(false);
       }
     );
@@ -69,12 +71,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // app_metadata からロールを抽出 (Source of Truth)
   const extractRole = (currentUser: User) => {
-    // SupabaseのJWTには app_metadata.role が含まれています
-    // DBトリガーで同期されているため、これを信頼します
     const assignedRole = currentUser.app_metadata?.role as UserRole | undefined;
-    setRole(assignedRole ?? 'user'); // デフォルトは 'user'
+    setRole(assignedRole ?? 'user');
   };
 
   const signOut = async () => {
@@ -93,4 +92,5 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
+// --- カスタムフックも named export ---
 export const useAuth = () => useContext(AuthContext);

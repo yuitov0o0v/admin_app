@@ -6,17 +6,19 @@ import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { AuthProvider } from './context/AuthContext';
 
 // コンポーネント
-import { PrivateRoute } from './components/ProtectedRoute';
+import { AdminRoute, PrivateRoute } from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
 // ページ (まだ作成していないものはプレースホルダーとしてインポートを想定)
-import Login from './pages/LogIn';
-import Signup from './pages/SignUp';
-import Home from './pages/Home';
-import SpotMap from './pages/SpotMap';
-import ListView from './pages/ListView'; // "List" は予約語と競合しやすいため ListView 推奨
-import Info from './pages/Info';
-import Setting from './pages/Setting';
+import Login from './pages/logIn';
+import Signup from './pages/signup';
+import Home from './pages/home';
+import SpotMap from './pages/spotmap';
+import EventView from './pages/eventview';
+import ListView from './pages/listview'; // "List" は予約語と競合しやすいため ListView 推奨
+import Info from './pages/info';
+import Invitation from './pages/invitation';
+import Setting from './pages/setting';
 
 // MUIテーマ設定
 const theme = createTheme({
@@ -64,15 +66,20 @@ const App: React.FC = () => {
             <Route element={<PrivateRoute />}>
               {/* 2. 認証OKなら Layout を適用 (ヘッダー・サイドバー表示) */}
               <Route element={<Layout />}>
-                
+
+            
+                <Route element={<AdminRoute />}>
                 {/* ダッシュボード */}
-                <Route path="/" element={<Home />} />
-                
+                  <Route path="/" element={<Home />} />
+
                 {/* 機能ページ */}
-                <Route path="/map" element={<SpotMap />} />
-                <Route path="/list" element={<ListView />} />
-                <Route path="/info" element={<Info />} />
-                <Route path="/setting" element={<Setting />} />
+                  <Route path="/spotmap" element={<SpotMap />} />
+                  <Route path="/events" element={<EventView />} />
+                  <Route path="/list" element={<ListView />} />
+                  <Route path="/info" element={<Info />} />
+                  <Route path="/setting" element={<Setting />} />
+                  <Route path="/invitation" element={<Invitation />} />
+                </Route>
                 
               </Route>
             </Route>

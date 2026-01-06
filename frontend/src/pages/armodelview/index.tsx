@@ -2,12 +2,13 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   Container, Grid, Card, CardContent, CardActions, Typography, Box, Button,
   Dialog, DialogTitle, DialogContent, Fab, Snackbar, Alert, TextField,
-  CircularProgress, Stack, Chip, IconButton, CardMedia, Divider // CardMedia, Dividerを追加
+  CircularProgress, Stack, Chip, IconButton, CardMedia, Divider
 } from '@mui/material';
 import {
   Add as AddIcon, ViewInAr as ViewInArIcon, Delete as DeleteIcon,
   CloudUpload as CloudUploadIcon, InsertDriveFile as FileIcon,
-  Image as ImageIcon // ImageIconを追加
+  Image as ImageIcon,
+  Close as CloseIcon // 閉じるボタン用に追加
 } from '@mui/icons-material';
 
 import { useAuth } from '../../context/AuthContext';
@@ -15,7 +16,7 @@ import { arApi } from '../../lib/api/ar';
 import { storageApi } from '../../lib/api/storage';
 import type{ Database } from '../../types/supabase';
 
-// 型定義が未更新の場合のために補完（本来は自動生成されるべき）
+// 型定義が未更新の場合のために補完
 type ArModel = Database['public']['Tables']['ar_model']['Row'] & { thumbnail_url?: string | null };
 
 const ArModelView: React.FC = () => {
@@ -30,14 +31,17 @@ const ArModelView: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
+  // 【追加】画像プレビュー用のState (nullなら非表示、URL文字列なら表示)
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+
   // フォームState
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [modelFile, setModelFile] = useState<File | null>(null);
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null); // 【追加】サムネイル用
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const thumbnailInputRef = useRef<HTMLInputElement>(null); // 【追加】サムネイル用Ref
+  const thumbnailInputRef = useRef<HTMLInputElement>(null);
 
   // --- データ取得 (変更なし) ---
   const fetchModels = async () => {
@@ -64,8 +68,13 @@ const ArModelView: React.FC = () => {
     setName('');
     setDescription('');
     setModelFile(null);
-    setThumbnailFile(null); // リセット
+    setThumbnailFile(null);
     setOpenForm(true);
+  };
+
+  // 【追加】プレビューを閉じるハンドラ
+  const handleClosePreview = () => {
+    setPreviewImageUrl(null);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -74,14 +83,13 @@ const ArModelView: React.FC = () => {
     }
   };
 
-  // 【追加】サムネイル画像選択ハンドラ
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setThumbnailFile(e.target.files[0]);
     }
   };
 
-  // 送信処理 (大幅修正)
+  // 送信処理 (変更なし)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!modelFile) {
@@ -95,18 +103,18 @@ const ArModelView: React.FC = () => {
       // 1. 3Dモデル本体のアップロード
       const modelUrl = await storageApi.uploadArModel(modelFile);
 
-      // 2. サムネイル画像のアップロード（もし選択されていれば）
+      // 2. サムネイル画像のアップロード
       let thumbnailUrl = null;
       if (thumbnailFile) {
         thumbnailUrl = await storageApi.uploadArThumbnail(thumbnailFile);
       }
 
-      // 3. DBへ保存 (thumbnail_url を追加)
+      // 3. DBへ保存
       const newModel = {
         model_name: name,
         description: description,
         file_url: modelUrl,
-        thumbnail_url: thumbnailUrl, // 【追加】
+        thumbnail_url: thumbnailUrl,
         file_size: modelFile.size,
         file_type: modelFile.name.split('.').pop() || 'unknown',
         created_by_user_id: user?.id || ''
@@ -174,14 +182,21 @@ const ArModelView: React.FC = () => {
           models.map((model) => (
             <Grid key={model.id} size={{ xs: 12, sm: 6, md: 4 }}>
               <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                {/* 【修正】サムネイルがあれば画像を表示、なければ従来のアイコンを表示 */}
+                {/* 【修正】クリックイベントとスタイルを追加 */}
                 {model.thumbnail_url ? (
                   <CardMedia
                     component="img"
                     height="140"
                     image={model.thumbnail_url}
                     alt={model.model_name}
-                    sx={{ objectFit: 'cover', bgcolor: 'grey.100' }}
+                    onClick={() => setPreviewImageUrl(model.thumbnail_url!)} // クリックでプレビュー表示
+                    sx={{ 
+                      objectFit: 'cover', 
+                      bgcolor: 'grey.100',
+                      cursor: 'pointer', // クリック可能であることを示す
+                      transition: 'opacity 0.2s',
+                      '&:hover': { opacity: 0.8 }
+                    }}
                   />
                 ) : (
                   <Box sx={{ height: 140, bgcolor: 'grey.100', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', borderBottom: '1px solid #eee' }}>
@@ -196,7 +211,6 @@ const ArModelView: React.FC = () => {
                   </Typography>
                   
                   <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-                    {/* サムネイルがある場合はファイル形式もチップで表示 */}
                     {model.thumbnail_url && (
                       <Chip label={`.${model.file_type}`} size="small" variant="outlined" sx={{ textTransform: 'uppercase' }} />
                     )}
@@ -220,7 +234,39 @@ const ArModelView: React.FC = () => {
         )}
       </Grid>
 
-      {/* 登録ダイアログ */}
+      {/* 【追加】画像プレビュー用ダイアログ */}
+      <Dialog
+        open={!!previewImageUrl}
+        onClose={handleClosePreview}
+        maxWidth="md" // 大きめに表示
+        sx={{ '& .MuiDialog-paper': { bgcolor: 'transparent', boxShadow: 'none', overflow: 'hidden' } }} // 背景を透過させて画像だけ浮き出させるスタイル例
+      >
+        {/* 閉じるボタン（任意） */}
+        <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}>
+             <IconButton onClick={handleClosePreview} sx={{ bgcolor: 'rgba(0,0,0,0.5)', color: 'white', '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' } }}>
+                 <CloseIcon />
+             </IconButton>
+        </Box>
+
+        <DialogContent sx={{ p: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          {previewImageUrl && (
+            <img
+              src={previewImageUrl}
+              alt="Preview"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '90vh', // 画面からはみ出さないように制限
+                objectFit: 'contain',
+                borderRadius: 4
+              }}
+               // 画像をクリックしても閉じられるようにする場合
+               onClick={handleClosePreview}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 登録ダイアログ (変更なし) */}
       <Dialog open={openForm} onClose={() => setOpenForm(false)} maxWidth="sm" fullWidth>
         <DialogTitle>ARモデル登録</DialogTitle>
         <DialogContent dividers>
@@ -231,7 +277,7 @@ const ArModelView: React.FC = () => {
 
               <Divider />
 
-              {/* 1. 3Dモデルファイル入力 (必須) */}
+              {/* 1. 3Dモデルファイル入力 */}
               <Box>
                 <Typography variant="subtitle2" gutterBottom>1. 3Dモデルファイル (必須)</Typography>
                 <Typography variant="caption" color="textSecondary">対応形式: .glb, .gltf, .usdz</Typography>
@@ -254,7 +300,7 @@ const ArModelView: React.FC = () => {
                 </Box>
               </Box>
 
-              {/* 2. サムネイル画像入力 (任意) */}
+              {/* 2. サムネイル画像入力 */}
               <Box>
                 <Typography variant="subtitle2" gutterBottom>2. サムネイル画像 (任意)</Typography>
                 <Typography variant="caption" color="textSecondary">一覧表示時に使用されます (jpg, png等)</Typography>

@@ -17,6 +17,7 @@ import {
   Divider,
   // Container
 } from '@mui/material';
+import ViewInArIcon from '@mui/icons-material/ViewInAr';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import {
   Event as EventIcon,
@@ -52,6 +53,7 @@ const Layout: React.FC = () => {
     { text: 'Map', icon: <MapIcon />, path: '/spotmap' },
     { text: 'Events', icon: <EventIcon />, path: '/events' },
     { text: 'Spot', icon: <ListIcon />, path: '/list' },
+    { text: 'AR Models', icon: <ViewInArIcon />, path: '/ar-models' },
     { text: 'Info', icon: <InfoIcon />, path: '/info' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/setting' },
     { text: 'Admin Invite', icon: <SupervisorAccountIcon />, path: '/invitation' },

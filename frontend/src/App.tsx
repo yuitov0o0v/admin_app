@@ -10,7 +10,7 @@ import { AdminRoute, PrivateRoute } from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
 // ページ (まだ作成していないものはプレースホルダーとしてインポートを想定)
-import Login from './pages/logIn';
+import Login from './pages/login';
 import Signup from './pages/signup';
 import Home from './pages/home';
 import SpotMap from './pages/spotmap';

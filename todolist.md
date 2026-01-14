@@ -12,3 +12,15 @@
       -> 'app_metadata' ->> 'role',
     'user'
   ) = 'admin';
+
+Home
+
+ListView
+
+Login
+
+Setting
+
+Signup
+
+SpotMap

@@ -28,7 +28,7 @@ import { useAuth } from '../../context/AuthContext';
 import { eventsApi } from '../../lib/api/events';
 import { storageApi } from '../../lib/api/storage';
 import type{ Database } from '../../types/supabase';
-import EventRegistrationForm from '../../components/eventRegistrationForm';
+import EventRegistrationForm from '../../components/eventregistrationform';
 
 type Event = Database['public']['Tables']['events']['Row'];
 

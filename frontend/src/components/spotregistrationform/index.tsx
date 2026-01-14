@@ -96,7 +96,7 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
   selectedArModelId, setSelectedArModelId,
   category, setCategory,
   pinColor, setPinColor,
-  radius, setRadius,
+  radius=25, setRadius,
   newPin,
   addressLoading,
   submitting,
@@ -270,18 +270,18 @@ const SpotRegistrationForm: React.FC<SpotRegistrationFormProps> = ({
         </Select>
       </FormControl>
 
-      <Box>
+      {/* <Box>
         <Typography variant="body2" gutterBottom>チェックイン判定範囲: {radius}m</Typography>
         <Slider
           value={radius}
           onChange={(_, newValue) => setRadius(newValue as number)}
-          step={10}
+          step={5}
           min={10}
-          max={200}
+          max={50}
           valueLabelDisplay="auto"
           disabled={isFormDisabled}
         />
-      </Box>
+      </Box> */}
 
       {/* --- ボタン (編集モードでは親側で制御するため非表示にすることも可能だが、今回は親のDialogActionsを使うため非表示にする) --- */}
       {!isEditMode && (

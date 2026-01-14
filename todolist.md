@@ -5,3 +5,10 @@
 
 
 スキーマにauthのトリガーが含まれていないので必ずDBの複製時はトリガーの作成を行うようにする
+
+
+  SELECT COALESCE(
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb
+      -> 'app_metadata' ->> 'role',
+    'user'
+  ) = 'admin';

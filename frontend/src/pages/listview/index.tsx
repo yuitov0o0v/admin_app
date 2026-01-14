@@ -47,8 +47,8 @@ import { storageApi } from '../../lib/api/storage'; // 追加
 import type{ Database } from '../../types/supabase';
 
 // フォームコンポーネントをインポート
-import SpotRegistrationForm from '../../components/spotRegistrationForm';
-import type { ARModel } from '../../components/spotRegistrationForm';
+import SpotRegistrationForm from '../../components/spotregistrationform';
+import type { ARModel } from '../../components/spotregistrationform';
 
 type Spot = Database['public']['Tables']['spots']['Row'];
 

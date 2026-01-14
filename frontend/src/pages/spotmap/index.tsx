@@ -25,8 +25,8 @@ import { storageApi } from '../../lib/api/storage'; // ヘルパー利用
 import type{ Database } from '../../types/supabase'; // Supabase型定義
 
 // --- Components ---
-import SpotRegistrationForm from '../../components/spotRegistrationForm';
-import type{ARModel, NewPin } from '../../components/spotRegistrationForm';
+import SpotRegistrationForm from '../../components/spotregistrationform';
+import type{ARModel, NewPin } from '../../components/spotregistrationform';
 
 // --- Leaflet CSS ---
 import 'leaflet/dist/leaflet.css';

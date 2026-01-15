@@ -210,10 +210,11 @@ const EventRegistrationForm: React.FC<EventRegistrationFormProps> = ({
                 />
               </Grid>
             </Grid>
-            <FormControlLabel
+            {/* 未使用のためコメントアウト */}
+            {/* <FormControlLabel
               control={<Switch checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />}
               label="公開する"
-            />
+            /> */}
             <TextField
               label="説明"
               fullWidth

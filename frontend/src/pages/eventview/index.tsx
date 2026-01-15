@@ -223,12 +223,13 @@ const EventView: React.FC = () => {
                 <CardContent sx={{ flexGrow: 1 }}>
                   <Typography variant="h6" gutterBottom>{event.name}</Typography>
                   <Box sx={{ mb: 2 }}>
-                    <Chip 
+                    {/* 未使用の為コメントアウト */}
+                    {/* <Chip 
                       label={event.is_public ? '公開中' : '非公開'} 
                       color={event.is_public ? 'success' : 'default'} 
                       size="small" 
                       variant="outlined"
-                    />
+                    /> */}
                   </Box>
                   <Typography variant="body2" color="text.secondary" paragraph sx={{
                       overflow: 'hidden',

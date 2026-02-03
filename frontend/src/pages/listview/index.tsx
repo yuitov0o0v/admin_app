@@ -443,14 +443,15 @@ const ListView: React.FC = () => {
                             </Typography>
                         </Box>
                     </Grid>
-                      <Grid size={{ xs: 12 }}>
+                      {/* チェックイン範囲指定機能が未実装のため一旦非表示 */}
+                      {/* <Grid size={{ xs: 12 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <RadarIcon color="action" />
                             <Typography variant="body2">
                                 チェックイン範囲: <strong>{selectedSpot.radius || 50}m</strong>
                             </Typography>
                         </Box>
-                    </Grid>
+                    </Grid> */}
                   </Grid>
                   
                   <Divider />
